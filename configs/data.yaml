@@ -1,0 +1,22 @@
+# Data / grid / domain config — Colorado Front Range prototype.
+# Decisions (locked): task=TEMPERATURE ONLY, coarse=NASA POWER daily T2M
+# (0.5 deg, ~50 km), target=10 km, projection=EPSG:5070 (CONUS Albers).
+#
+# Grid, temporal split, sources and channel order live in data_base.yaml.
+# Only what makes this domain THIS domain is below.
+extends: data_base
+
+store_root: "data_store"
+
+domain:
+  # Prototype region: Colorado Front Range, widened to 4x4 deg.
+  # Why widened: POWER is 0.5 deg, so a 2x2 deg box holds only ~4x4 coarse
+  # cells — not enough large-scale variability for the model to key off. 4x4
+  # deg gives ~8x8 coarse cells and still fits ONE POWER regional request
+  # (service cap ~4.5 deg/side); bigger domains are auto-tiled by
+  # data/download_power.py.
+  name: colorado_front_range
+  lon_min: -107.0
+  lon_max: -103.0
+  lat_min: 37.5
+  lat_max: 41.5

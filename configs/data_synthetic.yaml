@@ -1,0 +1,28 @@
+# Synthetic smoke-test domain — no downloads, no credentials, no real data.
+#
+# Exists so the quickstart cannot touch a real store: `store_root` points at a
+# throwaway directory, and the channel list matches model.in_channels so the
+# generated store is actually loadable by the shipped model config.
+#
+# The bbox is nominal — build_dataset --synthetic ignores it and generates a
+# square grid of `--size` cells — but the grid block is still read.
+#
+# Usage:
+#   DOWNSCALE_CONFIG_data=configs/data_synthetic.yaml \
+#       python -m data.build_dataset --synthetic --n 64 --size 100
+extends: data_base
+
+store_root: "data_store_synthetic"
+
+domain:
+  name: synthetic
+  lon_min: -107.0
+  lon_max: -103.0
+  lat_min: 37.5
+  lat_max: 41.5
+
+dataset:
+  # Must match model.in_channels (8) and the training domain's order, so a
+  # smoke-trained checkpoint has the same input contract as a real one.
+  input_channels: ["coarse_tmp", "dem", "landcover", "coastal_dist",
+                   "urban_frac", "land_mask", "doy_sin", "doy_cos"]

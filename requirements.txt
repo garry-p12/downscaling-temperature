@@ -1,0 +1,46 @@
+# Runtime dependencies. Install with:
+#     pip install -r requirements.txt
+# (or `pip install -e .` — pyproject.toml carries the same list.)
+
+# Core
+numpy>=1.24
+scipy>=1.10
+pandas>=2.0
+pyyaml>=6.0
+tqdm>=4.65
+
+# Deep learning
+torch>=2.1
+einops>=0.7
+
+# Geospatial / climate IO
+xarray>=2023.6
+zarr>=3.0            # the stores are Zarr v3 (zarr.json); zarr 2.x cannot open them
+netcdf4>=1.6
+dask>=2023.6
+rioxarray>=0.15
+rasterio>=1.3
+pyproj>=3.6
+geopandas>=0.14      # coastline vector -> coastal_dist (data/regrid.py)
+shapely>=2.0         # ditto
+
+# Remote data access
+fsspec>=2023.6
+s3fs>=2023.6
+# NASA POWER needs no client library (plain HTTPS via urllib).
+
+# Optional (conda-forge recommended): area-weighted regridding
+# xesmf>=0.8  --> install via: conda install -c conda-forge xesmf esmpy
+#   Falls back to rioxarray/scipy regridding if xesmf is unavailable.
+
+# Plotting / eval
+matplotlib>=3.7
+scikit-learn>=1.3    # gradient-boosting / RF baselines (evaluation/tree_baselines.py)
+
+# Static covariates: DEM tiles from USGS 3DEP (data/download_covariates.py).
+# Pulls a large geospatial dependency tree; only needed to BUILD a dataset,
+# not to train or evaluate on an existing store.
+py3dep>=0.16
+
+# Experiment tracking (optional; only needed if logging.wandb.enabled=true)
+wandb>=0.16

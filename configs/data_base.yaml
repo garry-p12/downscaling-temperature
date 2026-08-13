@@ -1,0 +1,106 @@
+# Shared data config. Domain files (data*.yaml) `extends:` this and override
+# ONLY what actually differs between domains — bbox, store root, and (where it
+# applies) the spatial holdout and anomaly settings.
+#
+# Everything here was previously copy-pasted verbatim into every domain file,
+# so a change to the grid, the temporal split or the source list had to be made
+# three times or silently drift. Do not add domain-specific values here.
+#
+# `${store_root}` is substituted by common/config.py from the top-level
+# `store_root` key of the MERGED config, i.e. from the domain file.
+
+store_root: "data_store"
+
+grid:
+  # Target working grid.
+  target_crs: "EPSG:5070"   # CONUS Albers Equal Area
+  target_res_m: 10000       # 10 km target resolution
+  # Coarse input native grid (NASA POWER daily = MERRA-2 native spacing,
+  # verified from a live response: 0.5 deg lat x 0.625 deg lon, ~55 x ~50 km at
+  # 39N). Coarse T2M is interpolated onto the target grid before entering the
+  # model (SR-style corrector), so the effective downscaling factor is
+  # ~50 km -> 10 km = 5x. Documentation only; nothing reads these.
+  coarse_res_deg_lat: 0.5
+  coarse_res_deg_lon: 0.625
+
+time:
+  # Contiguous blocks, never random days — daily fields are strongly
+  # autocorrelated and shuffling leaks between splits.
+  train: ["2019-01-01", "2021-12-31"]
+  val:   ["2022-01-01", "2022-12-31"]
+  test:  ["2023-01-01", "2023-12-31"]
+  # POWER daily is daily by construction; hourly AORC truth is aggregated.
+  freq: "daily"
+
+# Which high-res source supplies the 10 km temperature truth.
+#   era5_land -> 0.1 deg (~11 km lat / 8.7 km lon at 39N). Native resolution
+#                MATCHES the 10 km target, so truth is reprojected, not
+#                aggregated. Requires a CDS account (~/.cdsapirc).
+#   aorc      -> hourly 1 km, observation-informed; daily MEAN of hourly ==
+#                same statistic as POWER T2M. No credentials.
+#   prism     -> daily 4 km tmean = (tmin+tmax)/2; a different statistic, so
+#                expect a small systematic offset vs POWER.
+#
+# IMPORTANT: RMSE is NOT comparable across truth sources. ERA5-Land is itself
+# produced by lapse-rate-downscaling coarse ERA5, so a model with a DEM can
+# learn much of that deterministic correction and will score far better than
+# it does against observation-informed AORC. Same method, easier target.
+truth_source: "era5_land"  # era5_land | aorc | prism
+
+sources:
+  power:
+    # Coarse predictor (model input). No credentials, no account.
+    # Regional endpoint: one parameter per request, <=4.5 deg per side.
+    parameter: "T2M"           # 2 m air temperature, degC
+    community: "RE"            # RE | AG | SB (changes the parameter menu only)
+    pad_deg: 1.0               # bracket the domain before interpolation
+    out_dir: "${store_root}/raw/power"
+  era5_land:
+    # Resolution-matched truth. 0.1 deg hourly -> daily mean -> 10 km grid.
+    # Needs ~/.cdsapirc (free) and the ERA5-Land licence accepted once.
+    variable: "2m_temperature"   # arrives in KELVIN; converted downstream
+    pad_deg: 0.5                 # margin for the Albers-snapped target grid
+    out_dir: "${store_root}/raw/era5_land"
+  aorc:
+    # Ground truth (hourly, 1 km). Conservatively aggregated to 10 km.
+    # NOTE: this is the BUCKET ROOT, not a Zarr store — the bucket holds one
+    # store per year (<bucket>/<year>.zarr), which download_aorc.py composes.
+    # Coords there are latitude/longitude and temperature is in KELVIN;
+    # both are normalized downstream.
+    s3_uri: "s3://noaa-nws-aorc-v1-1-1km"
+    variables: ["TMP_2maboveground"]
+    out_dir: "${store_root}/raw/aorc"
+  prism:
+    # Alternative / cross-check truth. Daily 4 km tmean.
+    variables: ["tmean"]
+    resolution: "4km"          # 4km | 800m
+    out_dir: "${store_root}/raw/prism"
+  coastline:
+    # Natural Earth 10m coastline. Drives coastal_dist, which is a DEAD
+    # (all-zero) channel without it — see regrid.coastal_distance.
+    # NOT under ${store_root}: it is one global download shared by every
+    # domain, so re-downloading it per domain would be pure waste.
+    path: "data_store/raw/coastline/ne_10m_coastline.shp"
+  dem:
+    # Static covariate. USGS 3DEP / SRTM, resampled to target grid.
+    source: "srtm"
+    out_dir: "${store_root}/raw/dem"
+  landcover:
+    # Static covariate. NLCD, resampled (nearest) to target grid.
+    source: "nlcd"
+    out_dir: "${store_root}/raw/landcover"
+
+dataset:
+  # Paired, chunked Zarr store produced by build_dataset.py.
+  out_zarr: "${store_root}/dataset.zarr"
+  # Static covariate channels are appended to the coarse-predictor channel,
+  # all on the target grid. Order defines model input channel order and must
+  # match model.in_channels in configs/model.yaml. CHANGING THIS INVALIDATES
+  # EVERY EXISTING CHECKPOINT — domains that need a different set override it
+  # explicitly rather than editing here.
+  input_channels: ["coarse_tmp", "dem", "landcover", "coastal_dist", "urban_frac",
+                   "doy_sin", "doy_cos"]
+  target_channels: ["tmp"]
+  coarse_interp: "bilinear"    # bilinear | cubic
+  chunks:
+    time: 32

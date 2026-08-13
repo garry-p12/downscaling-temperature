@@ -1,0 +1,41 @@
+# Austin, TX — ZERO-SHOT TRANSFER TEST domain.
+#
+# Not a training domain. Models trained on Colorado are applied here unchanged
+# to answer the open question in RESULTS.md §7.1: does in-domain skill survive
+# on terrain the model has never seen?
+#
+# The contrast is deliberate and severe:
+#   Colorado (train)  DEM 1173-3757 m, mean 2131 m, high relief
+#   Austin  (test)    DEM ~100-400 m, low relief, urban + cropland
+# The learned correction is terrain-driven (fitted lapse rate -1.27 degC/km),
+# so this is close to a worst case for transfer, which is what makes it
+# informative.
+#
+# Channel order is inherited from data_base.yaml and must stay identical to the
+# training domain's — the weights depend on it.
+#
+# Usage:
+#   DOWNSCALE_CONFIG_data=configs/data_austin.yaml python -m data.download_power --years 2023
+extends: data_base
+
+store_root: "data_store_austin"
+
+domain:
+  # 3x3 deg around Austin (30.27N, 97.74W), held INLAND on purpose.
+  # A 4x4 box reaching the Gulf coast put ~6% of cells over water, where
+  # ERA5-Land (a LAND reanalysis) is NaN and NLCD has no class. That is fatal
+  # for SSIM specifically: its Gaussian windows propagate NaN, so a handful of
+  # water cells would poison the entire field. Staying inland keeps every cell
+  # valid without masking or infilling the truth.
+  name: austin
+  lon_min: -99.5
+  lon_max: -96.5
+  lat_min: 29.0
+  lat_max: 32.0
+
+# Temporal scheme is inherited unchanged from data_base.yaml, so the two
+# domains stay comparable. (The zero-shot transfer test used 2023-only with
+# empty train/val windows; that experiment is done — its result is in
+# RESULTS.md. Austin is now covered as a spatial holdout of the South-Central
+# training domain, because zero-shot transfer failed: every Colorado model
+# scored worse than plain interpolation here.)

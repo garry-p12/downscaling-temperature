@@ -1,0 +1,61 @@
+# South-Central US training domain — Austin held out spatially. ACTIVE DOMAIN.
+#
+# Replaces the Austin-only setup. At 50 km an Austin bounding box gives ~4x4 LR
+# pixels: not enough spatial diversity to learn a generalizable LR->HR mapping,
+# only enough to memorize noise. Training over Texas/South-Central US exposes
+# the network to varied terrain (Hill Country, Edwards Plateau, High Plains),
+# the Gulf coastline, and a wide land-cover range; Austin is then an unseen
+# CROP of the same store, making its evaluation a true spatial generalization
+# test rather than a temporal one.
+#
+# Usage:
+#   DOWNSCALE_CONFIG_data=configs/data_southcentral.yaml python -m ...
+extends: data_base
+
+store_root: "data_store_sc"
+
+domain:
+  # 10 x 8 deg. Includes the Gulf coast (so the land mask and coastal distance
+  # both carry signal), the Hill Country escarpment west of Austin, and the
+  # flat coastal plain east of it.
+  name: southcentral
+  lon_min: -104.0
+  lon_max: -94.0
+  lat_min: 27.0
+  lat_max: 35.0
+
+# --------------------------------------------------------------------------- #
+# Spatial holdout: the Austin evaluation region.
+# Training patches whose CENTRE falls inside this box (expanded by
+# holdout.buffer_deg) are excluded, so no training sample overlaps the
+# evaluation crop. Buffer > half the patch size in degrees guarantees that
+# even patch EDGES stay clear.
+# --------------------------------------------------------------------------- #
+holdout:
+  name: austin
+  lon_min: -98.6
+  lon_max: -97.0
+  lat_min: 29.7
+  lat_max: 31.0
+  buffer_deg: 1.0
+
+# Predict anomalies rather than absolute temperature: subtract a smoothed
+# day-of-year climatology (fit on TRAIN YEARS ONLY) from both LR and HR. The
+# network then learns fine-scale residual structure instead of relearning the
+# seasonal cycle, which is more stationary and easier to fit.
+anomaly:
+  enabled: true
+  smooth_days: 15        # centred rolling mean on the DOY climatology, wrapped
+
+dataset:
+  # Overrides the base channel list: land_mask is derived from ERA5-Land's
+  # ocean NaNs (it is a LAND reanalysis), so the network is told where truth
+  # exists rather than having to infer it. The base domains are inland-only and
+  # do not carry this channel — hence the override rather than a base edit.
+  # Must match model.in_channels in configs/model.yaml (8).
+  input_channels: ["coarse_tmp", "dem", "landcover", "coastal_dist",
+                   "urban_frac", "land_mask", "doy_sin", "doy_cos"]
+  # Cubic, not bilinear: the perfect-prognosis setup pre-interpolates LR to the
+  # HR grid and the network learns the residual, so a smoother, higher-order
+  # interpolant gives the residual less interpolation artefact to undo.
+  coarse_interp: "cubic"

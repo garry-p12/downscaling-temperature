@@ -1,0 +1,51 @@
+# Training config.
+
+seed: 1337
+device: "cuda"          # cuda | cpu | mps
+precision: "bf16"       # bf16 | fp16 | fp32
+
+data:
+  zarr: "data_store_sc/dataset.zarr"
+  batch_size: 8
+  num_workers: 4
+  patch_size: 48         # spatial crop (target-grid pixels) per sample; null = full field
+  patches_per_sample: 4  # random patches drawn per day -> 4x the training samples
+
+optim:
+  name: "adamw"
+  lr: 2.0e-4
+  weight_decay: 0.05
+  betas: [0.9, 0.999]
+
+schedule:
+  epochs: 100
+  warmup_epochs: 5
+  min_lr: 1.0e-6         # cosine floor
+
+# Which heads to train. Temperature is the only task in this build.
+tasks:
+  temp: true
+
+# Loss weights (tunable, not fixed constants).
+loss_weights:
+  # L1 rather than MSE: both regress toward the conditional mean, but MSE's
+  # quadratic penalty blurs harder, and fine-scale structure is the product.
+  pixel_loss: "l1"       # l1 | mse
+  temp: 1.0
+  ssim: 0.2              # weight of SSIM term in temperature loss
+
+logging:
+  out_dir: "runs"
+  ckpt_dir: "checkpoints"
+  log_every: 50
+  val_every: 1           # epochs
+
+  wandb:
+    enabled: true         # set true to stream loss/lr/metrics to Weights & Biases
+    project: "downscaling-temperature"
+    entity: null          # your wandb team/user; null = default
+    run_name: null        # null = wandb auto-name
+    mode: "online"        # online | offline | disabled
+    watch_model: false    # log gradients/params histograms (slower)
+    log_images: true      # log coarse/pred/truth/error panels each val
+    num_images: 4         # samples per panel
