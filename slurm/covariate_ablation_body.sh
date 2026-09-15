@@ -45,6 +45,12 @@ V2="coarse_tmp dem coastal_dist land_mask doy_sin doy_cos \
 # not matter".
 V3="coarse_tmp dem landcover urban_frac land_mask doy_sin doy_cos"
 
+# V4 isolates elev_std from the rest of the terrain block. V1 bundled four
+# channels and came out flat-to-slightly-worse; this asks whether sub-grid
+# relief on its own does anything, or whether the aspect pair (visibly noisy
+# over flat terrain) was diluting it.
+V4="$BASE elev_std"
+
 run_variant () {
     local name="$1" channels="$2" seed tag
     for seed in "${SEEDS[@]}"; do
@@ -62,12 +68,13 @@ run_variant () {
     done
 }
 
-VARIANTS=(v0_base v1_terrain v2_landcov v3_nocoast)
+VARIANTS=(v0_base v1_terrain v2_landcov v3_nocoast v4_elevstd)
 
 run_variant v0_base    "$BASE"
 run_variant v1_terrain "$V1"
 run_variant v2_landcov "$V2"
 run_variant v3_nocoast "$V3"
+run_variant v4_elevstd "$V4"
 
 # --------------------------------------------------------------------------- #
 # One evaluation pass over every run, so all variants share an identical
