@@ -130,7 +130,10 @@ def main(overrides: dict) -> None:
     if overrides.get("seed") is not None:
         tcfg["seed"] = int(overrides["seed"])
     device = resolve_device(tcfg["device"])
-    print(f"[train] device={device} seed={tcfg['seed']}")
+    # Printed because getting this wrong is silent: bf16 autocast only engages on
+    # CUDA, so a laptop run and a GPU run of identical code differ in numerics.
+    print(f"[train] device={device} precision={tcfg['precision']} "
+          f"seed={tcfg['seed']}")
     torch.manual_seed(tcfg["seed"])
 
     # --zarr wins over configs/train.yaml so a smoke run cannot be pointed at
@@ -144,23 +147,35 @@ def main(overrides: dict) -> None:
     dcfg = load_config("data")
     holdout = dcfg.get("holdout")
     ppS = tcfg["data"].get("patches_per_sample", 1)
+    # Covariate ablations select a subset of the superset store's channels.
+    use_ch = overrides.get("use_channels") or dcfg["dataset"].get("use_channels")
     train_ds = DownscaleDataset(zarr, norm, "train", patch, tcfg["seed"],
                                 holdout=holdout,
                                 holdout_mode="exclude" if holdout else None,
-                                patches_per_sample=ppS)
+                                patches_per_sample=ppS, use_channels=use_ch)
     # patch=None: validate on whole fields. Patch-cropping validation would
     # break the anomaly->degC conversion (climatology is full-grid) and make
     # val metrics depend on which crops were drawn.
     val_ds = DownscaleDataset(zarr, norm, "val", None, tcfg["seed"] + 1,
                               holdout=holdout,
-                              holdout_mode="exclude" if holdout else None)
+                              holdout_mode="exclude" if holdout else None,
+                              use_channels=use_ch)
     train_ld = DataLoader(train_ds, batch_size=tcfg["data"]["batch_size"],
                           shuffle=True, num_workers=tcfg["data"]["num_workers"],
                           drop_last=True)
     val_ld = DataLoader(val_ds, batch_size=1, shuffle=False)
 
+    # Derive the input width from the DATA, not configs/model.yaml. An ablation
+    # changes the channel count, and a mismatch here would either crash late or
+    # silently train against the wrong first-layer shape. Recording the channel
+    # NAMES in the checkpoint makes it self-describing, so evaluation rebuilds
+    # the same input stack without being told which variant this was.
+    mcfg["in_channels"] = len(train_ds.in_names)
+    mcfg["use_channels"] = list(train_ds.in_names)
     arch = mcfg.get("arch", "swin")
     model = build_model(mcfg).to(device)
+    print(f"[train] {len(train_ds.in_names)} input channels: "
+          f"{', '.join(train_ds.in_names)}")
     n_params = sum(p.numel() for p in model.parameters())
     print(f"[train] arch={arch} params={n_params/1e6:.2f}M")
 
@@ -268,6 +283,14 @@ if __name__ == "__main__":
                     help="override loss_weights.ssim (0.0 = pure pixel loss)")
     ap.add_argument("--pixel-loss", default=None, choices=["l1", "mse"],
                     help="override loss_weights.pixel_loss")
+    ap.add_argument("--precision", default=None, choices=["bf16", "fp16", "fp32"],
+                    help="override configs/train.yaml precision. USE fp32 ON GPU: "
+                         "bf16's 8-bit mantissa cannot hold the SSIM term's local "
+                         "variance/covariance products and roughly halves SSIM "
+                         "(RESULTS.md section 8)")
+    ap.add_argument("--use-channels", nargs="+", default=None,
+                    help="input channels to select from the store, in order "
+                         "(covariate ablations); default = all stored channels")
     ap.add_argument("--zarr", default=None,
                     help="override configs/train.yaml data.zarr (e.g. a "
                          "synthetic store built by data.build_dataset)")
@@ -277,5 +300,6 @@ if __name__ == "__main__":
                     help="override configs/model.yaml arch for this run")
     args = ap.parse_args()
     main({"epochs": args.epochs, "arch": args.arch, "zarr": args.zarr,
+          "use_channels": args.use_channels, "precision": args.precision,
           "seed": args.seed, "run_name": args.run_name,
           "ssim_weight": args.ssim_weight, "pixel_loss": args.pixel_loss})

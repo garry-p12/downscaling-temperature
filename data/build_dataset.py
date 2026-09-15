@@ -27,6 +27,7 @@ import xarray as xr
 
 from common import Normalizer, build_target_grid, load_config
 from common.grid import TargetGrid
+from data.covariates import LANDCOVER_CHANNELS
 
 
 # --------------------------------------------------------------------------- #
@@ -283,8 +284,15 @@ def land_mask_from_truth(cfg, tgrid: TargetGrid) -> xr.DataArray:
 
 def load_statics(cfg, tgrid: TargetGrid,
                  truth: xr.Dataset | None = None) -> xr.Dataset:
+    from data.covariates import (
+        LANDCOVER_CHANNELS,
+        TERRAIN_CHANNELS,
+        landcover_fractions,
+        terrain_features,
+    )
     from data.regrid import coastal_distance, raster_to_target
 
+    wanted = set(cfg["dataset"]["input_channels"])
     dem_p = Path(cfg["sources"]["dem"]["out_dir"]) / "dem.tif"
     lc_p = Path(cfg["sources"]["landcover"]["out_dir"]) / "landcover.tif"
     # 'average' not 'bilinear': the DEM is ~90 m and the target cells are
@@ -301,6 +309,20 @@ def load_statics(cfg, tgrid: TargetGrid,
     urban = _fill_nan_nearest(_urban_fraction(lc_p, tgrid), "urban_frac") \
         .rename("urban_frac")
     fields = [dem, lc, cdist, urban]
+
+    # Derived channels are built only when a config actually asks for them:
+    # terrain_features reads the full-resolution DEM (630 MB here), which is
+    # not worth paying for on a config that does not use the output.
+    terrain = sorted(wanted & set(TERRAIN_CHANNELS))
+    if terrain:
+        fields += [_fill_nan_nearest(d, d.name) for d in
+                   terrain_features(dem_p, tgrid, terrain,
+                                    dem_10km=dem.values)]
+    lc_frac = sorted(wanted & set(LANDCOVER_CHANNELS))
+    if lc_frac:
+        fields += [_fill_nan_nearest(d, d.name) for d in
+                   landcover_fractions(lc_p, tgrid, lc_frac)]
+
     if "land_mask" in cfg["dataset"]["input_channels"]:
         fields.append(land_mask_from_regridded(truth) if truth is not None
                       else land_mask_from_truth(cfg, tgrid))
@@ -465,7 +487,11 @@ def _to_dataset(inp, tgt, times, split, in_names, tg_names, tgrid,
 # Channels that must NOT be z-scored. land_mask is a 0/1 indicator used to
 # exclude ocean from the loss; standardizing it would turn it into two
 # arbitrary real values and break that use.
-NO_NORMALIZE = {"land_mask"}
+# Channels left on their natural scale. land_mask is a 0/1 indicator; the
+# land-cover fractions are already bounded [0, 1] and compositional, and
+# z-scoring a near-absent class (barren averages 0.003) would amplify its
+# rounding noise into an apparently strong signal.
+NO_NORMALIZE = {"land_mask"} | set(LANDCOVER_CHANNELS)
 
 
 def fit_normalizer(ds: xr.Dataset, cfg) -> Normalizer:
@@ -571,6 +597,37 @@ def build_synthetic(n: int, size: int, cfg, block: int = 5
 
 
 # --------------------------------------------------------------------------- #
+# land_mask is legitimately constant on an all-land domain (Colorado), so it is
+# the one channel allowed to carry no variance.
+MAY_BE_CONSTANT = {"land_mask"}
+
+
+def check_no_dead_channels(ds: xr.Dataset) -> None:
+    """Fail the build if any input channel is constant everywhere and always.
+
+    A dead channel is silent: training succeeds, metrics look plausible, and an
+    ablation on that channel reports "no effect" because there was nothing
+    there to remove. This has already happened once — coastal_dist degrades to
+    all-zero when geopandas is missing, and only a warning marked it.
+    """
+    names = ds["channel_in"].values.tolist()
+    dead = []
+    for i, name in enumerate(names):
+        if name in MAY_BE_CONSTANT:
+            continue
+        v = ds["input"].isel(channel_in=i).values
+        finite = v[np.isfinite(v)]
+        if finite.size == 0 or float(finite.max() - finite.min()) == 0.0:
+            dead.append(name)
+    if dead:
+        raise ValueError(
+            f"input channel(s) {dead} are constant over the whole domain and "
+            f"every timestep — they carry no information. Usual causes: a "
+            f"missing optional dependency (coastal_dist needs geopandas and "
+            f"shapely), or a source raster that does not cover the domain. "
+            f"Fix the source or drop the channel from dataset.input_channels.")
+
+
 def write(ds: xr.Dataset, nz: Normalizer, out_zarr: str, chunks: dict) -> None:
     out = Path(out_zarr)
     ds = ds.chunk({"time": chunks.get("time", 32)})
@@ -593,6 +650,9 @@ def main(synthetic: bool, n: int, size: int, norm_from: str | None = None,
         truth = load_truth(cfg, tgrid)
         statics = load_statics(cfg, tgrid, truth)
         ds = assemble(coarse, truth, statics, cfg, tgrid)
+
+    if not synthetic:
+        check_no_dead_channels(ds)
 
     if norm_from:
         # Zero-shot transfer: the model must see inputs standardized EXACTLY as

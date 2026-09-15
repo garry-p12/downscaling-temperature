@@ -1,0 +1,45 @@
+# South-Central SUPERSET store — every candidate covariate, built once.
+#
+# Covariate ablations are run by selecting subsets of this store with
+# `dataset.use_channels` (or --use-channels), NOT by rebuilding. Two reasons:
+# rebuilding re-reads a 630 MB DEM each time, and more importantly every
+# variant is then guaranteed to see bit-identical data, so a difference in
+# score cannot be an artefact of the build.
+#
+# `store_root` deliberately stays `data_store_sc` so the raw sources resolve to
+# the existing downloads; only `out_zarr` moves, into a subdirectory, which
+# also keeps the original store's norm_stats.json from being overwritten.
+#
+# Usage:
+#   DOWNSCALE_CONFIG_data=configs/data_sc_super.yaml python -m data.build_dataset
+extends: data_southcentral
+
+dataset:
+  out_zarr: "data_store_sc/super/dataset.zarr"
+  # Order is: the original eight, then terrain shape, then land-cover
+  # composition. Nothing is removed — variants subset this list.
+  input_channels:
+    # --- the current baseline, unchanged ---
+    - coarse_tmp
+    - dem
+    - landcover          # majority class; kept so V0 stays reproducible
+    - coastal_dist
+    - urban_frac         # ~= lc_developed (r = 0.996); kept for the same reason
+    - land_mask
+    - doy_sin
+    - doy_cos
+    # --- terrain shape, derived at the DEM's native ~90 m ---
+    - elev_std           # sub-grid relief, the strongest candidate
+    - slope_mean         # r = 0.87 with elev_std; stored to allow a later test
+    - tpi                # 10 km: basin vs ridge, cold-air pooling
+    - northness
+    - eastness
+    # --- land-cover composition, replacing the majority class ---
+    - lc_water
+    - lc_developed
+    - lc_barren          # sd 0.008; stored, but not expected to be used
+    - lc_forest
+    - lc_shrub
+    - lc_herbaceous
+    - lc_cultivated
+    - lc_wetland

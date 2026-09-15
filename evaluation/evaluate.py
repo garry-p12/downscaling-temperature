@@ -34,7 +34,8 @@ def model_predict(ckpt: str, zarr: str, norm: str, tasks: set[str],
     print(f"[eval] arch={mcfg.get('arch', 'swin')} "
           f"params={sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
 
-    ds = DownscaleDataset(zarr, norm, "test", None)
+    ds = DownscaleDataset(zarr, norm, "test", None,
+                          use_channels=mcfg.get("use_channels"))
     nz = ds.nz
     preds: dict[str, list] = {"tmp": []}
     for k in range(len(ds)):

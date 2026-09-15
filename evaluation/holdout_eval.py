@@ -31,6 +31,7 @@ import torch
 import xarray as xr
 
 from common import Normalizer, load_config
+from data.build_dataset import NO_NORMALIZE
 from evaluation.export_panels import _panel
 from models.model import load_checkpoint
 from training.dataset import holdout_bounds
@@ -81,13 +82,18 @@ def predict(arch: str, ds_full: xr.Dataset, nz: Normalizer, device) -> np.ndarra
         return None
     model, mcfg = load_checkpoint(ckpt, device, load_config("model"))
 
-    names = ds_full["channel_in"].values.tolist()
-    inp = ds_full["input"].values
+    stored = ds_full["channel_in"].values.tolist()
+    # Which channels this checkpoint was trained on. Recorded at training time,
+    # so a covariate ablation evaluates against its own input stack rather than
+    # whatever the store happens to hold.
+    names = list(mcfg.get("use_channels") or stored)
+    idx = [stored.index(n) for n in names]
+    inp = ds_full["input"].values[:, idx]
     out = np.empty((inp.shape[0], inp.shape[2], inp.shape[3]), "float32")
     for k in range(inp.shape[0]):
         x = inp[k].copy()
         for c, nm in enumerate(names):
-            if nm != "land_mask":
+            if nm not in NO_NORMALIZE:
                 x[c] = nz.transform(f"in::{nm}", x[c])
         np.nan_to_num(x, copy=False)
         t = torch.from_numpy(x).unsqueeze(0).to(device)

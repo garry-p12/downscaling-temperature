@@ -64,12 +64,27 @@ class DownscaleDataset(Dataset):
                  patch_size: int | None = None, seed: int = 0,
                  holdout: dict | None = None,
                  holdout_mode: str | None = None,
-                 patches_per_sample: int = 1):
+                 patches_per_sample: int = 1,
+                 use_channels: list[str] | None = None):
         self.ds = xr.open_zarr(zarr_path, consolidated=True)
         self.nz = Normalizer.load(norm_path)
         self.index = np.where(self.ds["split"].values == split)[0]
         self.patch = patch_size
-        self.in_names = self.ds["channel_in"].values.tolist()
+        stored = self.ds["channel_in"].values.tolist()
+        # A covariate ablation is then a config edit, not a dataset rebuild:
+        # one superset store is built once and each variant selects from it, so
+        # every variant is guaranteed to see bit-identical data.
+        if use_channels:
+            missing = [c for c in use_channels if c not in stored]
+            if missing:
+                raise KeyError(
+                    f"use_channels requests {missing}, which the store does not "
+                    f"have. Available: {stored}")
+            self.chan_idx = [stored.index(c) for c in use_channels]
+            self.in_names = list(use_channels)
+        else:
+            self.chan_idx = list(range(len(stored)))
+            self.in_names = stored
         self.out_names = self.ds["channel_out"].values.tolist()
         self.rng = np.random.RandomState(seed)
         self.H = self.ds.sizes["y"]
@@ -119,7 +134,7 @@ class DownscaleDataset(Dataset):
     def __getitem__(self, k: int):
         t = int(self.index[k % len(self.index)])
         sample = self.ds.isel(time=t)
-        x = sample["input"].values.astype("float32")     # (C_in, H, W)
+        x = sample["input"].values[self.chan_idx].astype("float32")
         y = sample["target"].values.astype("float32")    # (C_out, H, W)
 
         for c, name in enumerate(self.in_names):

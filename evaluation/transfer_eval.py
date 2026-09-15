@@ -60,7 +60,8 @@ def run_arch(arch: str, zarr: str, norm: str, device, n_panel: int,
 
     model, mcfg = load_checkpoint(ckpt, device, load_config("model"))
 
-    ds = DownscaleDataset(zarr, norm, "test", None)
+    ds = DownscaleDataset(zarr, norm, "test", None,
+                          use_channels=mcfg.get("use_channels"))
     nz = ds.nz
     ci = ds.in_names.index("coarse_tmp")
     ti = ds.target_index("tmp")
