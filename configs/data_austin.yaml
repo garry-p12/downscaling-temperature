@@ -1,7 +1,7 @@
 # Austin, TX — ZERO-SHOT TRANSFER TEST domain.
 #
 # Not a training domain. Models trained on Colorado are applied here unchanged
-# to answer the open question in RESULTS.md §7.1: does in-domain skill survive
+# to answer the open question in README.md §8: does in-domain skill survive
 # on terrain the model has never seen?
 #
 # The contrast is deliberate and severe:
@@ -36,6 +36,6 @@ domain:
 # Temporal scheme is inherited unchanged from data_base.yaml, so the two
 # domains stay comparable. (The zero-shot transfer test used 2023-only with
 # empty train/val windows; that experiment is done — its result is in
-# RESULTS.md. Austin is now covered as a spatial holdout of the South-Central
+# README.md. Austin is now covered as a spatial holdout of the South-Central
 # training domain, because zero-shot transfer failed: every Colorado model
 # scored worse than plain interpolation here.)

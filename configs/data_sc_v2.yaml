@@ -1,0 +1,57 @@
+# South-Central, V2 channel set — THE PROJECT DEFAULT for new work.
+#
+# Selected by the covariate ablation (image_outputs/covariate_ablation/):
+#   * land-cover COMPOSITION replaces the majority-class `landcover` channel and
+#     the hand-rolled `urban_frac`. The majority class was a categorical code fed
+#     as a continuous 11-95 ramp, and it was the same value across 48% of land
+#     cells; urban_frac is r = 0.996 with lc_developed, so keeping both would be
+#     a duplicated channel. CAVEAT: that 0.996 holds only on the 79% of the grid
+#     where NLCD actually exists. Over the whole grid it is 0.910, because NLCD
+#     is CONUS-only and the two channels handle the gap differently -- urban_frac
+#     counts nodata as "not developed" and stays hard-zero, while lc_developed is
+#     nearest-neighbour filled and reaches 0.71 in Mexican desert. So the
+#     redundancy argument is weaker than the single number suggests.
+#   * `coastal_dist` is KEPT. Removing it left RMSE unmoved but cost the most
+#     residual correlation of any variant (-0.0255, 2.8x seed noise) and flipped
+#     the 95th-percentile bias from -0.097 to +0.074.
+#   * the terrain block (elev_std, slope_mean, tpi, northness, eastness) is
+#     DROPPED. Tested as a block and again with elev_std alone: both cost
+#     residual correlation (-0.0132 and -0.0193, 1.4x and 2.1x noise) and helped
+#     nothing. Terrain's effect on temperature is largely seasonal-mean structure
+#     that the day-of-year climatology has already removed from the target.
+#
+# BE HONEST ABOUT WHAT THIS BUYS. It is an SSIM result, not an RMSE result:
+#   SSIM        0.7923 -> 0.8007   (+0.0084, 2.2x the between-seed sd)
+#   RMSE        0.7817 -> 0.7834   (slightly WORSE, well inside the 0.0100 bar)
+#   resid corr  0.5063 -> 0.5003   (~1 sd worse)
+# Any table keyed on RMSE will look marginally worse under this default. That is
+# the correct result, not a regression to fix.
+#
+# `input_channels` is deliberately NOT overridden — it stays the 21-name superset
+# inherited from data_sc_super, because build_dataset uses it as the BUILD
+# manifest and the store on disk holds all 21. Only `use_channels`, which the
+# Dataset reads at load time, is narrowed here. Consequence: running
+# `python -m data.build_dataset` against this config rebuilds the full 21-channel
+# superset and re-reads the 1.1 GB DEM. Correct, but slow and surprising.
+#
+# Usage:
+#   DOWNSCALE_CONFIG_data=configs/data_sc_v2.yaml python -m training.train ...
+extends: data_sc_super
+
+dataset:
+  # Order matters: coarse_tmp must stay first (several call sites do
+  # in_names.index("coarse_tmp") to recover the interpolation baseline).
+  use_channels:
+    - coarse_tmp
+    - dem
+    - coastal_dist
+    - land_mask
+    - doy_sin
+    - doy_cos
+    - lc_water
+    - lc_developed
+    - lc_forest
+    - lc_shrub
+    - lc_herbaceous
+    - lc_cultivated
+    - lc_wetland

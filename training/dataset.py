@@ -111,11 +111,6 @@ class DownscaleDataset(Dataset):
     def __len__(self) -> int:
         return len(self.index) * self.patches_per_sample
 
-    # ------------------------------------------------------------------ #
-    def _overlaps_holdout(self, i: int, j: int) -> bool:
-        i0, i1, j0, j1 = self.box
-        return not (i + self.patch <= i0 or i >= i1
-                    or j + self.patch <= j0 or j >= j1)
 
     def _sample_origin(self) -> tuple[int, int]:
         return (self.rng.randint(0, max(1, self.H - self.patch + 1)),

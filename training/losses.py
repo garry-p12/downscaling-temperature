@@ -46,7 +46,7 @@ def temp_loss(pred: torch.Tensor, target: torch.Tensor,
     L1 preserves edges better, which matters here because the whole point of
     downscaling is fine-scale structure. The SSIM term pushes further in the
     same direction — it is a metric we report, so optimizing it directly is
-    deliberate, and that overlap is stated in RESULTS.md.
+    deliberate, and that overlap is stated in README.md.
 
     ``mask`` (1 = score this cell, 0 = ignore) excludes ocean, where ERA5-Land
     has no truth. Masked cells are zero-filled upstream, so without this the

@@ -24,7 +24,8 @@ dataset:
     - dem
     - landcover          # majority class; kept so V0 stays reproducible
     - coastal_dist
-    - urban_frac         # ~= lc_developed (r = 0.996); kept for the same reason
+    - urban_frac         # ~= lc_developed (r = 0.996 where NLCD is real, 0.910
+                         #   over the whole grid); kept for the same reason
     - land_mask
     - doy_sin
     - doy_cos

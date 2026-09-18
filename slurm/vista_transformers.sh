@@ -14,7 +14,8 @@ echo "=== node $(hostname)  $(date)"
 nvidia-smi --query-gpu=name --format=csv,noheader | head -1
 source "${WORK}/miniforge3/etc/profile.d/conda.sh"
 conda activate dsc
-export DOWNSCALE_CONFIG_data=configs/data_sc_super.yaml
+# V2 (13 channels) is the default set; the body no longer carries a copy.
+export DOWNSCALE_CONFIG_data=configs/data_sc_v2.yaml
 export WANDB_MODE=offline PYTHONUNBUFFERED=1
 export PYTHON=python DEVICE=cuda PRECISION=fp32
 export ZARR="data_store_sc/super/dataset.zarr" EPOCHS=20

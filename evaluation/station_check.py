@@ -39,6 +39,7 @@ import torch
 import xarray as xr
 
 from common import Normalizer, load_config
+from data.build_dataset import NO_NORMALIZE
 from models.model import load_checkpoint
 from training.run_all import ckpt_path
 
@@ -101,15 +102,21 @@ def model_series(arch: str, test: xr.Dataset, nz: Normalizer, i: int, j: int,
     ckpt = ckpt_path(arch)
     if not ckpt.exists():
         return None
-    model, _ = load_checkpoint(ckpt, device, load_config("model"))
+    model, mcfg = load_checkpoint(ckpt, device, load_config("model"))
 
-    names = test["channel_in"].values.tolist()
-    inp = test["input"].values
+    # Build the input stack from the CHANNELS THIS CHECKPOINT WAS TRAINED ON,
+    # not from whatever the store happens to hold. Against the 21-channel
+    # superset store the old behaviour fed every stored channel to a net built
+    # for 13, and normalized lc_* fractions that are deliberately absent from
+    # norm_stats.json.
+    stored = test["channel_in"].values.tolist()
+    names = list(mcfg.get("use_channels") or stored)
+    inp = test["input"].values[:, [stored.index(n) for n in names]]
     out = np.empty(inp.shape[0], "float32")
     for k in range(inp.shape[0]):
         x = inp[k].copy()
         for c, nm in enumerate(names):
-            if nm != "land_mask":
+            if nm not in NO_NORMALIZE:
                 x[c] = nz.transform(f"in::{nm}", x[c])
         np.nan_to_num(x, copy=False)
         p = model(torch.from_numpy(x).unsqueeze(0).to(device), {"temp"})

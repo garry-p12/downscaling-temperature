@@ -21,7 +21,7 @@ POWER = SC / "raw/power/power_T2M_southcentral_2019_t00.nc"
 ERA5 = SC / "raw/era5_land/era5land_southcentral_201906.nc"
 DEM = SC / "raw/dem/dem.tif"
 LC = SC / "raw/landcover/landcover.tif"
-ZARR = SC / "dataset.zarr"
+ZARR = SC / "super" / "dataset.zarr"   # the 21-channel superset, not the V0 store
 NORM = SC / "norm_stats.json"
 ISD = SC / "raw/isd/722540-13904-2023.gz"  # KAUS
 
@@ -125,7 +125,7 @@ def inspect_isd() -> str:
     lines = ["File: KAUS ISD-Lite 2023 (gzipped CSV)",
              "Columns: year, month, day, hour, temp, dewp, slp, wdir, wspd, ...",
              "temp in tenths °C; -9999 = missing",
-             ""] + [l.rstrip() for l in head]
+             ""] + [ln.rstrip() for ln in head]
     return "\n".join(lines)
 
 

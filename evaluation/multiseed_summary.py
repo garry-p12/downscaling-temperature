@@ -1,6 +1,6 @@
 """Decide whether the architecture ranking is real or run-to-run noise.
 
-RESULTS.md §3 claims nine of ten architectures are tied. That rests on one
+README.md §5.1 claims nine of ten architectures are tied. That rests on one
 training run each plus bootstrap CIs — but a bootstrap over days measures
 SAMPLING variability (which days landed in the test year), not TRAINING
 variability (which random initialization the optimizer got). Only the second

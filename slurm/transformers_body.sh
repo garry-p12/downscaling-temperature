@@ -15,19 +15,18 @@
 
 set -uo pipefail
 
+# Channels come from DOWNSCALE_CONFIG_data (configs/data_sc_v2.yaml), not from a
+# shell copy. One definition: a second one here could silently drift and the
+# whole comparison rests on every arm seeing the same stack.
+
 PYTHON="${PYTHON:-python}"
 DEVICE="${DEVICE:-cuda}"
 ZARR="${ZARR:-data_store_sc/super/dataset.zarr}"
-PRECISION="${PRECISION:-fp32}"     # never bf16 on GPU: halves SSIM (RESULTS s8)
+PRECISION="${PRECISION:-fp32}"     # never bf16 on GPU: halves SSIM (README.md section 9)
 EPOCHS="${EPOCHS:-20}"
 SEED="${SEED:-1337}"
 OUT="${OUT:-image_outputs/transformers_covariates}"
 
-# The winning covariate set from the ablation: land-cover composition replacing
-# the majority class and urban_frac, coastal_dist retained (dropping it flipped
-# the hot-tail bias and cost residual correlation).
-CHANNELS="coarse_tmp dem coastal_dist land_mask doy_sin doy_cos \
-          lc_water lc_developed lc_forest lc_shrub lc_herbaceous lc_cultivated lc_wetland"
 
 # Ascending parameter count, from the published table.
 ARCHS=(esrt swinir_light maxvit segformer vit restormer swin)
@@ -44,7 +43,6 @@ for arch in "${ARCHS[@]}"; do
     "$PYTHON" -u -m training.train \
         --arch "$arch" --epochs "$EPOCHS" --seed "$SEED" \
         --run-name "$tag" --zarr "$ZARR" --precision "$PRECISION" \
-        --use-channels $CHANNELS \
         || echo "[tf] ${tag} FAILED, continuing"
 done
 

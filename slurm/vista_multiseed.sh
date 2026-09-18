@@ -9,7 +9,7 @@
 #SBATCH -A ATM23014
 #
 # Multi-seed repeats — the experiment that decides whether the nine-way tie in
-# RESULTS.md §3 is real or an artifact of single runs.
+# README.md §5.1 is real or an artifact of single runs.
 #
 # Six architectures spanning 0.13M -> 41.5M parameters, five seeds each. That
 # range is chosen deliberately: it includes the nominal winner (deepsd), the
@@ -31,8 +31,10 @@ python -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is
 export DOWNSCALE_CONFIG_data=configs/data_southcentral.yaml
 export WANDB_MODE=offline
 export PYTHONUNBUFFERED=1
-sed -i 's/^device: .*/device: "cuda"/' configs/train.yaml
-sed -i 's/^precision: .*/precision: "fp32"/' configs/train.yaml   # bf16 halves SSIM
+
+# fp32 is passed per-run below, NOT sed-ed into the tracked YAML. bf16 autocast
+# halves SSIM on this loss (README.md section 9) and the old in-place edit left
+# the working tree dirty on the cluster.
 
 ARCHS="deepsd esrt edsr restormer swin convnext"
 SEEDS="1337 7 42 2024 31337"
@@ -44,7 +46,7 @@ for s in $SEEDS; do
       echo "=== $name exists, skipping"; continue
     fi
     echo "=============== $name  $(date)"
-    python -u -m training.train --arch "$a" --epochs 20 \
+    python -u -m training.train --precision fp32 --arch "$a" --epochs 20 \
         --seed "$s" --run-name "$name" || echo "[ms] $name FAILED, continuing"
   done
 done

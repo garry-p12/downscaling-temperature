@@ -10,14 +10,16 @@
 # Five seeds on the winning land-cover channel set, same protocol, evaluated
 # against the existing DeepSD five-seed runs in one pass.
 set -uo pipefail
+
+# Channels come from DOWNSCALE_CONFIG_data (configs/data_sc_v2.yaml), not from a
+# shell copy. One definition: a second one here could silently drift and the
+# whole comparison rests on every arm seeing the same stack.
 PYTHON="${PYTHON:-python}"; DEVICE="${DEVICE:-cuda}"
 ZARR="${ZARR:-data_store_sc/super/dataset.zarr}"
 PRECISION="${PRECISION:-fp32}"; EPOCHS="${EPOCHS:-20}"
 OUT="${OUT:-image_outputs/restormer_seeds}"
 SEEDS=(1337 7 42 2024 31337)
 
-CHANNELS="coarse_tmp dem coastal_dist land_mask doy_sin doy_cos \
-          lc_water lc_developed lc_forest lc_shrub lc_herbaceous lc_cultivated lc_wetland"
 
 RUNS=()
 for seed in "${SEEDS[@]}"; do
@@ -25,8 +27,7 @@ for seed in "${SEEDS[@]}"; do
     [ -f "checkpoints/${tag}/last.pt" ] && { echo "=== ${tag}: done, skipping"; continue; }
     echo "=============== ${tag}  $(date +%H:%M:%S)"
     "$PYTHON" -u -m training.train --arch restormer --epochs "$EPOCHS" --seed "$seed" \
-        --run-name "$tag" --zarr "$ZARR" --precision "$PRECISION" \
-        --use-channels $CHANNELS || echo "[rs] ${tag} FAILED, continuing"
+        --run-name "$tag" --zarr "$ZARR" --precision "$PRECISION" || echo "[rs] ${tag} FAILED, continuing"
 done
 
 DONE=()

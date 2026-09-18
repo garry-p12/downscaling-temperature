@@ -1,7 +1,7 @@
 """Spatial holdout geometry and the arch/checkpoint path map.
 
 The holdout is the whole basis of the reported result — if a training patch can
-see an Austin cell, the number in RESULTS.md means nothing — so its bounds are
+see an Austin cell, the number in README.md means nothing — so its bounds are
 tested directly rather than through a full Dataset (which would need a store).
 """
 from __future__ import annotations

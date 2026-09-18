@@ -55,7 +55,7 @@ def test_constant_offset_leaves_spatial_corr_intact(rng):
 
 
 def test_residual_corr_is_harsher_than_raw_corr(rng):
-    """The headline claim in RESULTS.md rests on this: removing the baseline
+    """The headline claim in README.md rests on this: removing the baseline
     strips the large-scale structure that inflates raw correlation."""
     truth = rng.normal(size=(6, 24, 24))
     base = truth + 0.5 * rng.normal(size=truth.shape)      # a decent baseline

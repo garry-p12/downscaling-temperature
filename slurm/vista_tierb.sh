@@ -56,20 +56,22 @@ export DOWNSCALE_CONFIG_data=configs/data_southcentral.yaml
 export WANDB_MODE=offline          # compute nodes have no outbound network
 export PYTHONUNBUFFERED=1
 
+# fp32 is passed per-run below, NOT sed-ed into the tracked YAML. bf16 autocast
+# halves SSIM on this loss (README.md section 9) and the old in-place edit left
+# the working tree dirty on the cluster.
+
 # cuda, not mps: resolve_device() falls back to mps/cpu only when cuda is absent
-sed -i 's/^device: .*/device: "cuda"/' configs/train.yaml
 # fp32, NOT bf16. autocast is gated on device.type == "cuda", so the laptop
 # (MPS) silently trains in fp32 while the GPU would train in bf16 — Tier A and
 # Tier B would then differ in numerical precision, not just architecture.
 # bf16 also wrecks the SSIM loss term specifically: its 8-bit mantissa cannot
 # hold the local variance/covariance products SSIM is built from. Observed
 # directly here — swin reached SSIM 0.44 under bf16 vs 0.88 for Tier A in fp32.
-sed -i 's/^precision: .*/precision: "fp32"/' configs/train.yaml
 
 ARCHS="swin restormer maxvit convnext"
 for a in $ARCHS; do
   echo "=============== $a  $(date)"
-  python -u -m training.train --arch "$a" --epochs 20 || echo "[tierb] $a FAILED, continuing"
+  python -u -m training.train --precision fp32 --arch "$a" --epochs 20 || echo "[tierb] $a FAILED, continuing"
 done
 
 # ------------------------------------------------- Austin holdout eval ---- #

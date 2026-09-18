@@ -32,6 +32,7 @@ import torch
 import xarray as xr
 
 from common import Normalizer, load_config
+from data.build_dataset import NO_NORMALIZE
 from models.model import load_checkpoint
 from training.dataset import holdout_bounds
 from training.run_all import ckpt_path
@@ -45,19 +46,23 @@ BASELINE_BAR = "#9ca3af"  # the reference row, deliberately recessive
 @torch.no_grad()
 def predict_all(archs, test, nz, i0, i1, j0, j1, clim_t, lm):
     """Absolute-degC predictions cropped to the holdout, per architecture."""
-    names = test["channel_in"].values.tolist()
-    inp = test["input"].values
+    stored = test["channel_in"].values.tolist()
+    full_inp = test["input"].values
     out = {}
     for arch in archs:
         p = ckpt_path(arch)
         if not p.exists():
             continue
-        m, _ = load_checkpoint(p, "cpu", load_config("model"))
+        m, mcfg = load_checkpoint(p, "cpu", load_config("model"))
+        # Per-checkpoint channel selection: models in one figure may have been
+        # trained on different channel sets.
+        names = list(mcfg.get("use_channels") or stored)
+        inp = full_inp[:, [stored.index(n) for n in names]]
         pred = np.empty((inp.shape[0], i1 - i0, j1 - j0), "float32")
         for k in range(inp.shape[0]):
             x = inp[k].copy()
             for c, nm in enumerate(names):
-                if nm != "land_mask":
+                if nm not in NO_NORMALIZE:
                     x[c] = nz.transform(f"in::{nm}", x[c])
             np.nan_to_num(x, copy=False)
             full = m(torch.from_numpy(x).unsqueeze(0), {"temp"})["temp"][0, 0].numpy()

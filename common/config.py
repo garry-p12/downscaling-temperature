@@ -120,11 +120,3 @@ def load_config(name: str) -> Cfg:
     node = _load_raw(_resolve_path(name))
     return Cfg(_interpolate(node, node))
 
-
-def load_all_configs() -> Cfg:
-    """Load data/model/train into one namespace."""
-    return Cfg(
-        data=load_config("data"),
-        model=load_config("model"),
-        train=load_config("train"),
-    )

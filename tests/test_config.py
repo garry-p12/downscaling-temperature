@@ -161,3 +161,43 @@ def test_holdout_box_sits_inside_the_training_domain():
     dom, hold = cfg["domain"], cfg["holdout"]
     assert dom["lon_min"] < hold["lon_min"] < hold["lon_max"] < dom["lon_max"]
     assert dom["lat_min"] < hold["lat_min"] < hold["lat_max"] < dom["lat_max"]
+
+
+# --------------------------------------------------------------------------- #
+# The V2 default channel set
+# --------------------------------------------------------------------------- #
+V2 = "configs/data_sc_v2.yaml"
+
+
+def test_v2_selects_a_subset_of_what_the_store_actually_holds():
+    """use_channels narrows the stack at load time; input_channels is the BUILD
+    manifest and must stay the superset. Selecting a channel the store does not
+    contain fails at Dataset construction, hours into a sweep."""
+    cfg = load_config(V2)
+    assert set(cfg["dataset"]["use_channels"]) <= set(cfg["dataset"]["input_channels"])
+    assert len(cfg["dataset"]["input_channels"]) == 21
+
+
+def test_v2_is_the_thirteen_channel_set_with_coarse_tmp_first():
+    """Several call sites recover the interpolation baseline via
+    in_names.index('coarse_tmp'); order is part of the contract."""
+    ch = load_config(V2)["dataset"]["use_channels"]
+    assert len(ch) == 13
+    assert ch[0] == "coarse_tmp"
+
+
+def test_v2_drops_the_channels_the_ablation_rejected():
+    ch = set(load_config(V2)["dataset"]["use_channels"])
+    for dropped in ("landcover", "urban_frac", "elev_std", "slope_mean",
+                    "tpi", "northness", "eastness", "lc_barren"):
+        assert dropped not in ch, f"{dropped} should not be in the V2 default"
+    assert "coastal_dist" in ch, "removing coastal_dist cost 2.8x-noise resid corr"
+
+
+def test_v2_land_cover_fractions_are_all_unnormalised():
+    """z-scoring a near-absent class amplifies rounding noise into signal."""
+    from data.build_dataset import NO_NORMALIZE
+
+    for c in load_config(V2)["dataset"]["use_channels"]:
+        if c.startswith("lc_"):
+            assert c in NO_NORMALIZE

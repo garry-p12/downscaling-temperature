@@ -18,7 +18,7 @@ DEVICE="${DEVICE:-cpu}"
 ZARR="${ZARR:-data_store_sc/super/dataset.zarr}"
 EPOCHS="${EPOCHS:-20}"
 OUT="${OUT:-image_outputs/covariate_ablation}"
-# fp32 on GPU, always. bf16 autocast halves SSIM on this loss (RESULTS.md s8),
+# fp32 on GPU, always. bf16 autocast halves SSIM on this loss (README.md section 9),
 # and it engages ONLY on CUDA -- so a GPU sweep silently differs from a laptop
 # one unless this is pinned. The old Tier-B script did it by sed-ing the YAML.
 PRECISION="${PRECISION:-fp32}"

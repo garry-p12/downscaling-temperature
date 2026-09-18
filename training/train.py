@@ -287,7 +287,7 @@ if __name__ == "__main__":
                     help="override configs/train.yaml precision. USE fp32 ON GPU: "
                          "bf16's 8-bit mantissa cannot hold the SSIM term's local "
                          "variance/covariance products and roughly halves SSIM "
-                         "(RESULTS.md section 8)")
+                         "(README.md section 9)")
     ap.add_argument("--use-channels", nargs="+", default=None,
                     help="input channels to select from the store, in order "
                          "(covariate ablations); default = all stored channels")

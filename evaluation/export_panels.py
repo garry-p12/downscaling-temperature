@@ -73,7 +73,8 @@ def export(arch: str, zarr: str, norm: str, split: str, n: int,
 
     model, mcfg = load_checkpoint(ckpt, device, load_config("model"))
 
-    ds = DownscaleDataset(zarr, norm, split, None)
+    ds = DownscaleDataset(zarr, norm, split, None,
+                          use_channels=mcfg.get("use_channels"))
     if len(ds) == 0:
         print(f"[panels] {arch}: split '{split}' is empty")
         return None

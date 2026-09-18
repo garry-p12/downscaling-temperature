@@ -1,6 +1,6 @@
 """Zero-shot transfer evaluation: apply trained weights to an unseen domain.
 
-Answers the open question in RESULTS.md §7.1 — the Colorado models are trained
+Answers the open question in README.md §8 — the Colorado models are trained
 and tested on the same grid cells, so per-cell corrections could be memorised
 rather than learned. Running them unchanged on a different region separates the
 two.
