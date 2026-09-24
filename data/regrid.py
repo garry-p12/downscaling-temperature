@@ -114,6 +114,16 @@ def field_to_target(da: xr.DataArray, tgrid: TargetGrid,
         return _regular_grid_interp(
             da, tgrid, "cubic" if method == "cubic" else "linear")
 
+    # Aggregating a FINE source onto a coarse target is the case that matters
+    # for truth products (AORC is ~1 km, the target is 10 km, so one target
+    # cell covers ~100 source pixels). The scipy fallback below approximates
+    # "conservative" with NEAREST, which takes a single pixel instead of the
+    # cell mean — a different physical quantity, and one that injects the
+    # sub-grid variance the aggregation is supposed to remove. Do a real
+    # block mean instead, which needs no xesmf.
+    if method == "conservative" and not _HAVE_XESMF:
+        return _block_mean_to_target(da, tgrid)
+
     tgt = _target_dataset(tgrid)
     if _HAVE_XESMF:
         import xesmf
@@ -130,6 +140,61 @@ def field_to_target(da: xr.DataArray, tgrid: TargetGrid,
         RuntimeWarning,
     )
     return _griddata_fallback(da, tgrid, method)
+
+
+def _block_mean_to_target(da: xr.DataArray, tgrid: TargetGrid) -> xr.DataArray:
+    """Area-weighted aggregation of a fine lat/lon field onto the target grid.
+
+    Every source pixel is assigned to the target cell its CENTRE falls in, and
+    each target cell takes the mean of its members. With ~100 source pixels per
+    target cell this is within a fraction of a percent of true conservative
+    regridding, and unlike the nearest-neighbour fallback it is the same
+    quantity the coarse product reports: a cell mean.
+
+    Source pixels outside the target grid are dropped; target cells that
+    receive no pixel come back NaN rather than silently borrowing a neighbour.
+    """
+    from pyproj import Transformer
+
+    lat = np.asarray(da["lat"].values)
+    lon = np.asarray(da["lon"].values)
+    if lat.ndim == 1:
+        lon2, lat2 = np.meshgrid(lon, lat)
+    else:
+        lon2, lat2 = lon, lat
+
+    tf = Transformer.from_crs("EPSG:4326", tgrid.crs, always_xy=True)
+    xs, ys = tf.transform(lon2.ravel(), lat2.ravel())
+
+    # Target cell edges from its centres (uniform spacing by construction).
+    dx = float(tgrid.x[1] - tgrid.x[0])
+    dy = float(tgrid.y[1] - tgrid.y[0])
+    ny, nx = tgrid.shape
+    j = np.floor((xs - (tgrid.x[0] - dx / 2)) / dx).astype(np.int64)
+    i = np.floor((ys - (tgrid.y[0] - dy / 2)) / dy).astype(np.int64)
+    ok = (i >= 0) & (i < ny) & (j >= 0) & (j < nx)
+    flat = np.where(ok, i * nx + j, 0)
+
+    vals = np.asarray(da.values)
+    stack = vals.reshape(-1, lat2.size) if vals.ndim == 3 else vals.reshape(1, -1)
+    out = np.full((stack.shape[0], ny * nx), np.nan, dtype="float32")
+    for t in range(stack.shape[0]):
+        v = stack[t]
+        good = ok & np.isfinite(v)
+        tot = np.bincount(flat[good], weights=v[good], minlength=ny * nx)
+        cnt = np.bincount(flat[good], minlength=ny * nx)
+        with np.errstate(invalid="ignore"):
+            m = cnt > 0
+            out[t, m] = (tot[m] / cnt[m]).astype("float32")
+    out = out.reshape((-1, ny, nx))
+
+    if vals.ndim == 3:
+        return xr.DataArray(out, dims=("time", "y", "x"),
+                            coords={"time": da["time"], "y": tgrid.y, "x": tgrid.x},
+                            name=da.name, attrs=da.attrs)
+    return xr.DataArray(out[0], dims=("y", "x"),
+                        coords={"y": tgrid.y, "x": tgrid.x},
+                        name=da.name, attrs=da.attrs)
 
 
 def _griddata_fallback(da: xr.DataArray, tgrid: TargetGrid,

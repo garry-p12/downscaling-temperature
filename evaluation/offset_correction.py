@@ -90,6 +90,25 @@ def subregion_means(resid, mask, ny, nx, k=3):
     return np.stack(out, 1)
 
 
+def eof_features(resid, mask, idx_fit, n_modes=36):
+    """Project the training-region residual onto its leading EOFs.
+
+    A k x k block grid is an arbitrary basis: the blocks are square, equally
+    weighted, and cut across whatever spatial structure the bias actually has.
+    The empirical orthogonal functions of the residual field ARE that structure,
+    ordered by how much variance each explains, so the same number of features
+    should carry more signal — or show that the blocks were already enough.
+
+    Modes are computed on the FITTING days only; test days are projected onto
+    them, so no test information enters the basis.
+    """
+    F = resid[:, mask]                       # (time, cells)
+    mu = F[idx_fit].mean(0)
+    U, S, Vt = np.linalg.svd(F[idx_fit] - mu, full_matrices=False)
+    P = Vt[:n_modes].T                       # (cells, modes)
+    return (F - mu) @ P
+
+
 def ridge_fit_predict(X, y, idx_fit, alpha=1.0):
     """Ridge fit on idx_fit only, prediction everywhere. Columns standardised
     using the FITTING rows so test statistics never touch the fit."""
@@ -113,7 +132,7 @@ def fit_ar(series, order, idx_fit):
     return np.linalg.lstsq(np.asarray(X), np.asarray(y), rcond=None)[0]
 
 
-def main(archs, zarr, device, out):
+def main(archs, zarr, device, out, dyn_zarr=None):
     cfg = load_config("data")
     ds = xr.open_zarr(zarr, consolidated=True)
     nz = Normalizer.load(str(Path(zarr).parent / "norm_stats.json"))
@@ -130,6 +149,28 @@ def main(archs, zarr, device, out):
     print(f"train-region cells {int(m_train.sum())}, holdout cells "
           f"{int(m_hold.sum())}, days {len(split)} "
           f"({is_tr.sum()} train / {is_te.sum()} test)\n")
+
+    # Dynamic POWER predictors, observed over the HELD-OUT region on the same
+    # day. These are INPUTS, not truth — available everywhere, including where
+    # no ERA5-Land exists — so using their holdout values assumes nothing the
+    # uncorrected model does not already have. That is the one thing block
+    # means of the training residual structurally cannot do: they can only
+    # interpolate the bias field from outside, while these observe conditions
+    # inside it.
+    DYN = None
+    if dyn_zarr and Path(dyn_zarr).exists():
+        dd = xr.open_zarr(dyn_zarr, consolidated=True)
+        if not (dd["time"].values == ds["time"].values).all():
+            raise SystemExit("dyn store time axis does not match the main store")
+        dn = dd["channel_in"].values.tolist()
+        cols, labs = [], []
+        for c in ("coarse_tmp", "coarse_wind", "coarse_rh",
+                  "coarse_dewpt", "coarse_swdown"):
+            if c in dn:
+                cols.append(dd["input"].values[:, dn.index(c)][:, m_hold].mean(1))
+                labs.append(c)
+        DYN = np.stack(cols, 1)
+        print(f"dynamic features over the holdout: {labs}\n")
 
     report = {}
     for arch in archs:
@@ -176,8 +217,10 @@ def main(archs, zarr, device, out):
         for kk_ in (3, 6):
             feats[f"{kk_ * kk_} sub-region means (k={kk_})"] = \
                 subregion_means(resid, m_train, ny, nx, k=kk_)
-        feats["sub-regions k=6 + lag1 + season"] = np.c_[
-            subregion_means(resid, m_train, ny, nx, k=6), lag(off_train, 1), season]
+        if DYN is not None:
+            feats["dynamic POWER over the holdout ONLY"] = DYN
+            feats["sub-regions k=6 + dynamic POWER"] = np.c_[
+                subregion_means(resid, m_train, ny, nx, k=6), DYN]
         for nm, X in feats.items():
             res[f"FAIR: {nm}"] = rmse(ridge_fit_predict(X, off_hold, tr_idx))
 
@@ -213,5 +256,8 @@ if __name__ == "__main__":
     ap.add_argument("--zarr", default="data_store_sc/super/dataset.zarr")
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--out", default="outputs/offset_correction.json")
+    ap.add_argument("--dyn-zarr", default=None,
+                    help="store holding the dynamic POWER channels; adds their "
+                         "holdout-region means as estimator features")
     a = ap.parse_args()
-    main(a.archs, a.zarr, a.device, a.out)
+    main(a.archs, a.zarr, a.device, a.out, a.dyn_zarr)

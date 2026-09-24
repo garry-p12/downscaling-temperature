@@ -1,0 +1,70 @@
+# South-Central superset PLUS dynamic coarse predictors.
+#
+# WHY. Every covariate in README 5.2 is STATIC, which structurally caps it at
+# the 2.8% of holdout residual variance that time-invariant spatial information
+# can address (5.4). Five channel sets moved RMSE by ~0, and 5.8 showed the
+# nonlinearity is worth +0.010 coherence in one band — so the ceiling is not
+# modelling capacity, it is what the inputs can possibly say about a given day.
+#
+# These four fields vary WITH THE WEATHER and come from the same POWER endpoint
+# as T2M, with no credentials and no new pipeline:
+#
+#   WS2M               wind speed  — mixing, so it modulates how strongly
+#                                    terrain and land cover imprint on 2 m T
+#   RH2M               humidity    — partitions available energy between
+#                                    sensible and latent heat
+#   T2MDEW             dewpoint    — with T2M gives the dewpoint depression,
+#                                    the cleanest available proxy for how dry
+#                                    the boundary layer is
+#   ALLSKY_SFC_SW_DWN  radiation   — cloud cover, the driver of daytime
+#                                    surface heating contrast
+#
+# There is also a specific reason to expect these to help with the 5.7 bias
+# field. The block-mean estimator recovers 89% of the offset oracle by
+# INTERPOLATING from outside the held-out region. These predictors are observed
+# ON the held-out region on the same day, so they are the natural candidate for
+# the residual ~11% that interpolation cannot reach.
+#
+# Usage:
+#   DOWNSCALE_CONFIG_data=configs/data_sc_dyn.yaml python -m data.build_dataset
+extends: data_sc_super
+
+sources:
+  power:
+    # `parameter` stays T2M so anything reading the singular key is unchanged;
+    # `parameters` is what the multi-field build reads.
+    parameters: ["T2M", "WS2M", "RH2M", "T2MDEW", "ALLSKY_SFC_SW_DWN"]
+
+dataset:
+  out_zarr: "data_store_sc/dyn/dataset.zarr"
+  input_channels:
+    # --- dynamic coarse predictors: coarse_tmp first, and it MUST stay first.
+    # --- Several call sites recover the interpolation baseline via
+    # --- in_names.index("coarse_tmp"), and DeepSD hardcodes coarse_index=0.
+    - coarse_tmp
+    - coarse_wind
+    - coarse_rh
+    - coarse_dewpt
+    - coarse_swdown
+    # --- static: unchanged from data_sc_super so the two stores stay
+    # --- comparable channel-for-channel.
+    - dem
+    - landcover
+    - coastal_dist
+    - urban_frac
+    - land_mask
+    - doy_sin
+    - doy_cos
+    - elev_std
+    - slope_mean
+    - tpi
+    - northness
+    - eastness
+    - lc_water
+    - lc_developed
+    - lc_barren
+    - lc_forest
+    - lc_shrub
+    - lc_herbaceous
+    - lc_cultivated
+    - lc_wetland

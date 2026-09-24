@@ -97,8 +97,14 @@ def nearest_cell(ds: xr.Dataset, lat: float, lon: float) -> tuple[int, int]:
 
 
 @torch.no_grad()
-def model_series(arch: str, test: xr.Dataset, nz: Normalizer, i: int, j: int,
-                 device) -> np.ndarray | None:
+def model_series(arch: str, test: xr.Dataset, nz: Normalizer, i, j,
+                 device, full_field: bool = False) -> np.ndarray | None:
+    """Model output for every day: one cell (i, j), or the whole field.
+
+    full_field is what the offset correction needs — the estimate is built from
+    the residual over the training REGION, which a single station cell cannot
+    provide.
+    """
     ckpt = ckpt_path(arch)
     if not ckpt.exists():
         return None
@@ -112,15 +118,19 @@ def model_series(arch: str, test: xr.Dataset, nz: Normalizer, i: int, j: int,
     stored = test["channel_in"].values.tolist()
     names = list(mcfg.get("use_channels") or stored)
     inp = test["input"].values[:, [stored.index(n) for n in names]]
-    out = np.empty(inp.shape[0], "float32")
+    shape = ((inp.shape[0], inp.shape[2], inp.shape[3]) if full_field
+             else (inp.shape[0],))
+    out = np.empty(shape, "float32")
     for k in range(inp.shape[0]):
         x = inp[k].copy()
         for c, nm in enumerate(names):
             if nm not in NO_NORMALIZE:
                 x[c] = nz.transform(f"in::{nm}", x[c])
         np.nan_to_num(x, copy=False)
-        p = model(torch.from_numpy(x).unsqueeze(0).to(device), {"temp"})
-        out[k] = p["temp"][0, 0, i, j].cpu().numpy()
+        with torch.no_grad():        # 1826 full fields otherwise build a graph
+            p = model(torch.from_numpy(x).unsqueeze(0).to(device), {"temp"})
+        out[k] = (p["temp"][0, 0].cpu().numpy() if full_field
+                  else p["temp"][0, 0, i, j].cpu().numpy())
     return out
 
 
@@ -134,7 +144,8 @@ def _score(pred: np.ndarray, obs: np.ndarray) -> dict:
             "n_days": int(np.isfinite(d).sum())}
 
 
-def main(archs: list[str], year: int, station: str, device_name: str) -> None:
+def main(archs: list[str], year: int, station: str, device_name: str,
+         offset_correct: bool = False) -> None:
     cfg = load_config("data")
     zarr = cfg["dataset"]["out_zarr"]
     nz = Normalizer.load(str(Path(zarr).parent / "norm_stats.json"))
@@ -167,12 +178,54 @@ def main(archs: list[str], year: int, station: str, device_name: str) -> None:
     results["methods"]["ERA5-Land (our 'truth')"] = _score(era5, o)
     results["methods"]["interpolated_POWER"] = _score(power, o)
 
+    # The README 5.7 offset correction, scored against THERMOMETERS.
+    # This is the test that decides whether 5.7 is a real accuracy gain or an
+    # artefact: it removes a POWER<->ERA5-Land disagreement, and 5.8's linear
+    # probe showed the bias is a product-level effect — but not WHICH product
+    # carries it. Our corrected field sits ~0.55 degC from ERA5-Land while
+    # ERA5-Land is itself 0.90-0.96 degC from these stations, so it is entirely
+    # possible the correction moves us toward the reanalysis and away from
+    # reality. If these rows do not improve, 5.7 needs heavy qualification.
+    corr_fn = None
+    if offset_correct:
+        from evaluation.offset_correction import (ridge_fit_predict,
+                                                  subregion_means)
+        from training.dataset import holdout_bounds
+        i0, i1, j0, j1 = holdout_bounds(full, cfg["holdout"])
+        land_f = full["input"].values[0, names.index("land_mask")] > 0.5
+        hold_f = np.zeros_like(land_f); hold_f[i0:i1, j0:j1] = True
+        m_tr, m_ho = (~hold_f) & land_f, hold_f & land_f
+        split_all = full["split"].values
+        tr_idx = np.where(split_all == "train")[0]
+        is_test = split_all == "test"
+        ny_, nx_ = land_f.shape
+
+        def corr_fn(arch):                                   # noqa: F811
+            """Per-day offset estimate for every TEST day, from training-region
+            blocks only — no station and no holdout truth enters the fit."""
+            full_s = model_series(arch, full, nz, None, None, device,
+                                  full_field=True)
+            if full_s is None:
+                return None
+            pred_all = nz.inverse("out::tmp", full_s)
+            truth_all = np.nan_to_num(full["target"].values[:, 0])
+            resid_all = truth_all - pred_all
+            X = subregion_means(resid_all, m_tr, ny_, nx_, k=6)
+            est = ridge_fit_predict(X, resid_all[:, m_ho].mean(1), tr_idx)
+            return est[is_test]
+
     for arch in archs:
         s = model_series(arch, test, nz, i, j, device)
         if s is None:
             print(f"[station] {arch}: no checkpoint, skipping")
             continue
-        results["methods"][arch] = _score(nz.inverse("out::tmp", s) + clim_t, o)
+        series = nz.inverse("out::tmp", s) + clim_t
+        results["methods"][arch] = _score(series, o)
+        if corr_fn is not None:
+            off = corr_fn(arch)
+            if off is not None:
+                results["methods"][f"{arch} + offset correction"] = \
+                    _score(series + off, o)
 
     # Per-station filename: a single fixed path meant the second
     # station silently overwrote the first.
@@ -198,5 +251,8 @@ if __name__ == "__main__":
     ap.add_argument("--station", default="KAUS_Austin_Bergstrom",
                     choices=list(STATIONS))
     ap.add_argument("--device", default="cpu")
+    ap.add_argument("--offset-correct", action="store_true",
+                    help="also score the README 5.7 k=6 offset-corrected field")
     args = ap.parse_args()
-    main(args.archs, args.year, args.station, args.device)
+    main(args.archs, args.year, args.station, args.device,
+         args.offset_correct)

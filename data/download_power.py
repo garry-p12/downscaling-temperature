@@ -177,23 +177,26 @@ def open_power(cfg, parameter: str | None = None):
 
 
 # --------------------------------------------------------------------------- #
-def main(years: list[int]) -> None:
+def main(years: list[int], parameters: list[str] | None = None) -> None:
     cfg = load_config("data")
     src = cfg["sources"]["power"]
     out_dir = Path(src["out_dir"])
     name = cfg["domain"]["name"]
-    parameter = src["parameter"]
+    # POWER serves one parameter per request, so extra predictors are extra
+    # downloads of the same tile x year grid — not a different pipeline.
+    params = parameters or [src["parameter"]]
     community = src.get("community", "RE")
 
     boxes = tiles(cfg["domain"], src.get("pad_deg", PAD))
-    print(f"[power] {len(boxes)} tile(s) x {len(years)} year(s) "
-          f"= {len(boxes) * len(years)} requests")
+    print(f"[power] {len(params)} parameter(s) x {len(boxes)} tile(s) x "
+          f"{len(years)} year(s) = {len(params) * len(boxes) * len(years)} requests")
     missing = 0
-    for year in years:
-        for i, box in enumerate(boxes):
-            dest = out_dir / f"power_{parameter}_{name}_{year}_t{i:02d}.nc"
-            if fetch(box, year, parameter, community, dest) is None:
-                missing += 1
+    for parameter in params:
+        for year in years:
+            for i, box in enumerate(boxes):
+                dest = out_dir / f"power_{parameter}_{name}_{year}_t{i:02d}.nc"
+                if fetch(box, year, parameter, community, dest) is None:
+                    missing += 1
     if missing:
         raise SystemExit(f"[power] {missing} request(s) failed — re-run to retry")
     print("[power] done")
@@ -202,5 +205,9 @@ def main(years: list[int]) -> None:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--years", type=int, nargs="+", required=True)
+    ap.add_argument("--parameters", nargs="+", default=None,
+                    help="POWER parameter names; default: the config's single "
+                         "`parameter`. e.g. T2M WS2M RH2M T2MDEW "
+                         "ALLSKY_SFC_SW_DWN")
     args = ap.parse_args()
-    main(args.years)
+    main(args.years, args.parameters)

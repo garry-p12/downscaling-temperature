@@ -45,19 +45,19 @@ evaluated on a region no model ever trained on.
    (§5.4). Every null result above follows from that.
 5. **ERA5-Land is the accuracy ceiling.** It is itself 0.90–0.96 °C from station
    observations — further than the gap between our best and worst model.
-6. **The loss was part of the problem.** Trained under a pixel loss the output is
-   16× smoother than its grid — effective resolution 165 km at 10 km (§5.5).
-   Splitting the loss along the §5.4 budget, so the model stops being charged
-   for a daily bias it cannot fix, gains **+0.0415 residual correlation at 4.5×
-   seed noise** (§5.6). It buys spatial structure, not fine-scale phase: the
-   remaining deficit looks like an information limit.
+6. **The loss can be steered to the wrong target.** Splitting the loss along the
+   §5.4 budget gained +0.0415 residual correlation against ERA5-Land (§5.6) —
+   and made the model **worse than interpolation** against AORC, and worst of
+   all arms at both stations (§5.9). It learned the reanalysis's structure, not
+   reality's. Kept in the record as a caution: an improvement measured against
+   one product is not skill until a second product agrees.
 7. **Acting on the error budget beats modelling harder.** The daily bias is not
    one number but a smooth spatial FIELD. Regressing it on a 6x6 grid of
    training-region block means — using no holdout truth at all — cuts RMSE
-   **30.4% across 8 checkpoints**, which is **89% of the oracle** (§5.7). A
-   single domain mean gets only 38%. This is by far the largest effect in the
-   project, and it comes from arithmetic on the error budget rather than from
-   any model change.
+   **30.4% across 8 checkpoints**, which is **89% of the oracle** (§5.7). It is
+   the only intervention here that survives independent validation: **−15% to
+   −22% against AORC** over 1295 cells and **−12% to −16%** at two stations,
+   from a correction fitted against neither (§5.9).
 8. **A linear control says capacity is not the constraint.** A 2.2k-parameter
    affine model reaches within 4.7× seed noise of DeepSD overall, and *beats* it
    below 60 km (coherence 0.156 vs 0.088, 11.5× noise): the deep model
@@ -195,6 +195,13 @@ flat cells contribute zero rather than random directions.
 ---
 
 ## 5. Results
+
+> Sections 5.5–5.9 form one connected argument — diagnose the error budget,
+> attack it with the loss, then correct the bias directly, then validate against
+> thermometers. **`LOSS_AND_BIAS_PROGRAM.md`** tells that story end to end,
+> including the hypotheses that failed and the mistakes made along the way. This
+> section stays the reference record; that document is the narrative.
+
 
 All figures: Austin spatial holdout, 365 test days, 1295 land cells, metrics in
 physical °C after climatology add-back, 95% intervals from a 500-sample bootstrap
@@ -378,7 +385,7 @@ worse.** Loss-optimal smoothing minimises RMSE by construction. Given §5.4, tha
 is a trade worth making, but it is pre-registered here rather than discovered
 afterwards.
 
-### 5.6 Splitting the loss along the error budget — the largest effect measured
+### 5.6 Splitting the loss along the error budget — a gain that did NOT transfer
 
 §5.4 says half the holdout residual is a spatially uniform daily offset that no
 spatial model can fix, and that it is separately predictable from its own lag-1.
@@ -440,6 +447,34 @@ got worse. And a single-seed pilot of this work pointed the *opposite* way
 (coherence up, amplitude flat); five seeds reversed it, which is §5.1's lesson
 applying to our own method work.
 
+> ### THIS RESULT DOES NOT SURVIVE INDEPENDENT VALIDATION
+>
+> Everything above is measured against ERA5-Land. Scored against the two
+> truths that ERA5-Land is not, `of0` is the **worst** model tested, not the
+> best:
+>
+> | | ERA5-Land | AORC (1295 cells) | KAUS | KATT |
+> |---|---|---|---|---|
+> | `v2_landcov` | 0.7834 | **1.3250** | **1.140** | **1.029** |
+> | `of0` | **0.7869 / +0.0415 resid** | 1.4317 | 1.251 | 1.118 |
+> | *interpolated POWER* | *1.0136* | *1.4253* | *1.334* | *1.185* |
+>
+> Against AORC, `of0` uncorrected (1.4317) is **worse than doing nothing**
+> (interpolated POWER, 1.4253). The +0.0415 residual correlation was the model
+> learning to reproduce ERA5-Land's spatial structure, not reality's — and
+> §5.8 shows a good deal of that structure is manufactured (3x the fine-scale
+> amplitude at *lower* coherence than a linear model).
+>
+> The mechanism is plausible in hindsight: removing the offset penalty freed
+> capacity, and the model spent it fitting reanalysis-specific detail.
+>
+> The AORC and station rows are single-seed `of0_s1337` against §5.6's five.
+> But the direction is consistent across three independent judges, which is
+> stronger evidence than one judge at five seeds. **Do not quote §5.6 as a
+> skill improvement.** What it demonstrates is that a loss can be steered to
+> match a target product more closely while becoming less accurate — which is
+> a result about evaluation, not about downscaling.
+
 Reproduce with `slurm/vista_ofs_of1.sh` and `slurm/vista_ofs_of0.sh`, then
 `slurm/vista_ofs_eval.sh`. The decomposition requires full fields: the offset has
 sd 0.463 °C while the gap between a 48×48 patch mean and the true domain mean has
@@ -459,6 +494,22 @@ The alternative uses the 50.8% finding directly: if the offset is spatially
 uniform, measure it over the **training region on the same day** and apply it to
 the holdout. That uses no holdout truth at all and needs no time-series model.
 
+**READ THIS BEFORE QUOTING THE NUMBER.** "No holdout truth" is true and is the
+right comparison against an uncorrected model, but it is not the same as "no
+truth". The correction needs ERA5-Land over the TRAINING region on the day being
+corrected, which the uncorrected baseline does not. That changes the task this
+result belongs to:
+
+  * It is a valid result for **spatially extending a field you mostly already
+    have** — gap-filling, or carrying a product into a region where truth is
+    missing or a station network is absent.
+  * It is NOT a result for the framing in §1, "downscale POWER where no truth
+    exists". If truth covered 85% of the domain today you would rarely be
+    downscaling the other 15% from scratch.
+
+The gain is real and the comparison is internally fair. The framing is narrower
+than the headline number suggests, and that qualifier belongs next to it.
+
 | Arm | seeds | uncorrected | **spatial** | gain | ar(1) | *oracle* | offset corr |
 |---|---|---|---|---|---|---|---|
 | `v0_base` | 1 | 0.8024 | 0.7085 | −11.7% | 0.7340 | *0.5376* | 0.601 |
@@ -467,7 +518,9 @@ the holdout. That uses no holdout truth at all and needs no time-series model.
 | **`of0`** | 5 | 0.8065 | **0.6867** | **−14.8%** | 0.7204 | *0.5163* | **0.678** |
 
 Across all 10 checkpoints: **−13.0% RMSE, sd 2.1** — and a better estimator of
-the same quantity more than doubles that, see below.
+the same quantity more than doubles that, see below. §5.9 confirms this result
+against two independent truth products; it is the one intervention here that
+transfers.
 
 **The assumption-free estimator beats AR(1) on every single checkpoint**, using
 strictly less information. That reverses §5.4's framing: the offset is better
@@ -509,13 +562,62 @@ in the model those features are redundant and only cost degrees of freedom.
 This revises §5.4's framing. "50.8% spatially uniform daily offset" understates
 what is there: it is a smooth spatial bias field, and treating it as one number
 was discarding most of the recoverable signal. What remains after k=6 is ~11%
-of the offset variance — the genuinely unpredictable part.
+of the offset variance.
+
+**A principled basis does not beat the arbitrary one.** Square, equally-weighted
+blocks cut across whatever structure the bias actually has, so the empirical
+orthogonal functions of the residual field ought to carry more signal per
+feature. Tested on `of0_s1337`, with modes computed on the fitting days only:
+
+| features | blocks | EOFs |
+|---|---|---|
+| 9 | **−29.5%** | −27.1% |
+| 36 | **−34.2%** | −32.6% |
+| 80 | — | −34.7% |
+
+**Blocks win at every matched feature count.** The likely reason is that EOFs are
+ordered by variance explained *in the training region*, which is not the same as
+relevance to the held-out region; blocks keep spatial locality, and locality is
+what lets the fit interpolate a smooth field across the boundary. 80 EOFs edge
+past 36 blocks but need 2.2x the features to do it.
+
+Combined with the k-sweep plateau, this suggests k=6 blocks are close to the
+practical ceiling for estimators of this class.
+
+**Same-day meteorology does not reach the remaining 11% either.** The obvious
+candidate for "information from outside the residual field" is the dynamic
+POWER predictors (§5.9): wind, humidity, dewpoint and radiation are INPUTS, so
+unlike truth they are observed *inside* the held-out region — the one thing
+block means structurally cannot do, since those can only interpolate the bias
+field from outside. Their regional means correlate with the daily offset
+(radiation +0.273, humidity −0.240). Added to the estimator on `of0_s1337`:
+
+| estimator | gain |
+|---|---|
+| dynamic POWER over the holdout, alone | −5.6% |
+| sub-regions k=6 | **−34.2%** |
+| sub-regions k=6 + dynamic POWER | −34.0% |
+
+They add **nothing** on top of the spatial blocks, and cost slightly more than
+they return. The interpretation is that their information is already implied by
+the residual field: if the domain is cloudy or unusually humid today, the
+model's residual over the training region *already reflects that*, so the
+meteorology is redundant once the spatial pattern is in the fit. The residual
+~11% therefore looks genuinely unpredictable from anything available here.
 
 **Caveats.** All numbers use `last.pt`, so the uncorrected baselines sit above
 §5.2's `best.pt` figures; the comparison within this table is like-for-like. A
 single-seed reading of `of0` gave −17.1%; five seeds give −14.8%, so the pilot
 overstated it — the same lesson as §5.1 and §5.6. `v0_base` and `of1` are
 single-seed and included for spread, not as estimates.
+
+Two further limits worth stating. The estimator exploits structure in **the
+model's own residual**, so some of what it removes may be model error correlated
+across the domain rather than a POWER↔ERA5-Land product bias; it replicates
+across four arms, but all four share the DeepSD architecture. And the ridge fits
+36 coefficients on 1,096 days that are **not independent** — the offset has
+lag-1 autocorrelation 0.566 — so the effective sample is smaller than the count
+suggests and the confidence is correspondingly overstated.
 
 
 ### 5.8 A linear control — is nonlinear capacity the constraint?
@@ -560,6 +662,61 @@ error budget rather than from modelling. It also suggests a cheaper experiment
 than a new model: if capacity below 60 km is actively harmful, *suppressing*
 generation there (a spectral penalty, or low-passing the increment at inference)
 should help, and costs a day rather than weeks. That test is untried.
+
+
+### 5.9 Two independent truths — what survives
+
+§5.6 and §5.7 were both measured against ERA5-Land. This section scores them
+against products ERA5-Land is not: **NOAA ISD thermometers** (2 points) and
+**AORC** (observation-informed, 1 km, block-averaged to the 10 km grid over all
+1295 held-out cells).
+
+**AORC, 365 days of 2023, all 1295 held-out land cells.** The correction was
+fitted entirely against ERA5-Land and never saw AORC:
+
+| method | RMSE vs AORC |
+|---|---|
+| *ERA5-Land (the training target)* | *1.0623* |
+| `of0` + offset correction | **1.1200** (−21.8%) |
+| `v2_landcov` + offset correction | **1.1221** (−15.3%) |
+| `v2_landcov` | 1.3250 |
+| *interpolated POWER* | *1.4253* |
+| `of0` | 1.4317 |
+
+**Stations, 2023, both sites inside the holdout:**
+
+| method | KAUS | KATT |
+|---|---|---|
+| linear probe + offset correction | 0.961 | **0.872** |
+| `v2_landcov` + offset correction | **0.953** | 0.905 |
+| *ERA5-Land — the target itself* | *0.964* | *0.897* |
+| `of0` + offset correction | 0.994 | 0.915 |
+| linear probe | 1.102 | 1.014 |
+| `v2_landcov` | 1.140 | 1.029 |
+| `of0` | 1.251 | 1.118 |
+| *interpolated POWER* | *1.334* | *1.185* |
+
+Three conclusions, in order of confidence:
+
+1. **The offset correction (§5.7) is real.** −15% to −22% against AORC, −12% to
+   −16% at the stations, from a correction that never saw either. Three
+   independent judges agree. This is the one result that transfers.
+2. **The loss change (§5.6) is not.** See the box in §5.6.
+3. **Capacity keeps not helping.** The best configuration against independent
+   observations is the **2,198-parameter linear probe plus the correction** —
+   it beats ERA5-Land at both stations. A 210k-parameter network trained with a
+   bespoke loss does worse.
+
+**RMSE is not comparable across truth products** — the bilinear floor is
+1.0136 against ERA5-Land and 1.4253 against AORC on this domain. Only the
+relative effect of an intervention transfers, which is why every table above
+is read down a column and never across.
+
+AORC covers 86.4% of the domain (74% south of 29 N — it is a CONUS analysis)
+but **100% of the held-out land cells**, so the holdout comparison is complete.
+Aggregation is a true block mean; `field_to_target(..., 'conservative')`
+previously fell through to nearest-neighbour, which would have taken one 1 km
+pixel per 10 km cell instead of averaging ~100.
 
 ---
 

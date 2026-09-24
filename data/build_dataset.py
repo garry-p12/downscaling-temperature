@@ -45,26 +45,55 @@ def assign_splits(times: pd.DatetimeIndex, time_cfg: dict) -> np.ndarray:
 # --------------------------------------------------------------------------- #
 # Real source loaders (daily aggregation on the target grid)
 # --------------------------------------------------------------------------- #
+# POWER serves one parameter per request. These are the DYNAMIC predictors —
+# every covariate tested in README 5.2 is static, which structurally caps it at
+# the 2.8% slice of the error budget (5.4). A same-day field that varies with
+# the weather is the only channel class that could reach the 46.4% space-time
+# remainder, or inform the daily bias INSIDE the held-out region rather than
+# interpolating it from outside (5.7).
+POWER_CHANNELS = {
+    "T2M": "coarse_tmp",                 # degC, the existing predictor
+    "WS2M": "coarse_wind",               # m/s at 2 m
+    "RH2M": "coarse_rh",                 # %
+    "T2MDEW": "coarse_dewpt",            # degC dewpoint
+    "ALLSKY_SFC_SW_DWN": "coarse_swdown",  # downward shortwave
+}
+
+
 def load_coarse(cfg, tgrid: TargetGrid) -> xr.Dataset:
-    """NASA POWER daily T2M (0.5 deg, ~50 km) -> bilinear onto the 10 km grid.
+    """NASA POWER daily fields (0.5 deg, ~50 km) -> bilinear onto the 10 km grid.
 
     POWER already publishes a daily value, so there is no temporal aggregation
-    here; the only transform is the horizontal interpolation that turns the
-    coarse field into the SR-style corrector's input channel.
+    here; the only transform is the horizontal interpolation that turns each
+    coarse field into an input channel.
+
+    `sources.power.parameters` (a list) selects which to build. It defaults to
+    the single `parameter` for backward compatibility, so an existing config
+    builds exactly the store it built before.
     """
     from data.download_power import open_power
     from data.regrid import field_to_target
 
-    param = cfg["sources"]["power"]["parameter"]
-    ds = open_power(cfg)
-    if param not in ds:
-        raise KeyError(f"'{param}' not in POWER files (have {list(ds.data_vars)})")
-    tmp = ds[param]
-    if float(tmp.max()) > 200:                 # defensive: POWER T2M is degC
-        tmp = tmp - 273.15
+    src = cfg["sources"]["power"]
+    params = src.get("parameters") or [src["parameter"]]
     method = cfg["dataset"].get("coarse_interp", "bilinear")
-    tmp_t = field_to_target(tmp, tgrid, method).rename("coarse_tmp")
-    return xr.merge([tmp_t])
+
+    out = []
+    for param in params:
+        name = POWER_CHANNELS.get(param, f"coarse_{param.lower()}")
+        ds = open_power(cfg, param)
+        if param not in ds:
+            raise KeyError(f"'{param}' not in POWER files (have {list(ds.data_vars)})")
+        f = ds[param]
+        if param in ("T2M", "T2MDEW") and float(f.max()) > 200:
+            f = f - 273.15                 # defensive: POWER serves these in degC
+        # POWER marks missing as -999; left in place it would dominate the
+        # normalizer and silently poison every downstream statistic.
+        f = f.where(f > -900)
+        out.append(field_to_target(f, tgrid, method).rename(name))
+        print(f"[power] {param} -> {name}  "
+              f"range {float(out[-1].min()):.2f}..{float(out[-1].max()):.2f}")
+    return xr.merge(out)
 
 
 def load_truth(cfg, tgrid: TargetGrid) -> xr.Dataset:
@@ -453,6 +482,22 @@ def assemble(coarse: xr.Dataset, truth: xr.Dataset, statics: xr.Dataset,
               f"(fit on {int(train.sum())} train days); "
               f"coarse anomaly sd {inp[:, ci].std():.2f} degC, "
               f"target anomaly sd {np.nanstd(tgt[:, ti]):.2f} degC")
+
+        # Every OTHER dynamic POWER channel gets the same treatment. Humidity,
+        # wind and radiation have seasonal cycles at least as strong as
+        # temperature's; left in, they would re-encode the season the model
+        # already gets from doy_sin/doy_cos, and the useful signal — "today is
+        # unusually humid for the date" — would sit on top of a much larger
+        # climatological swing. Predicting anomalies from anomalies keeps the
+        # whole pipeline in one space.
+        for nm in in_names:
+            if nm == "coarse_tmp" or not nm.startswith("coarse_"):
+                continue
+            k = in_names.index(nm)
+            c = doy_climatology(inp[:, k], times, train, smooth)
+            inp[:, k] -= c[doy0]
+            clim_vars[f"clim_{nm}"] = c
+            print(f"[anomaly] {nm}: anomaly sd {np.nanstd(inp[:, k]):.3f}")
 
     return _to_dataset(inp, tgt, times, split, in_names, tg_names, tgrid,
                        clim_vars)
