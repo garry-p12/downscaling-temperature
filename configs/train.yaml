@@ -30,7 +30,9 @@ tasks:
 loss_weights:
   # L1 rather than MSE: both regress toward the conditional mean, but MSE's
   # quadratic penalty blurs harder, and fine-scale structure is the product.
-  pixel_loss: "l1"       # l1 | mse
+  pixel_loss: "l1"       # l1 | mse | amse   (amse = spectrally adjusted MSE,
+                         #   training/losses.py; fixes the double-penalty
+                         #   blurring that L1 only softens)
   temp: 1.0
   ssim: 0.2              # weight of SSIM term in temperature loss
 

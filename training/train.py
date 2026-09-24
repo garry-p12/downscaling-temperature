@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 from common import load_config
 from models.model import build_model
 from training.dataset import DownscaleDataset
-from training.losses import temp_loss
+from training.losses import decomposed_loss, temp_loss
 from training.metrics import residual_spatial_corr, temperature_metrics
 from training.tracking import Tracker
 from training.viz import prediction_panel
@@ -50,9 +50,19 @@ def compute_loss(out: dict, y: torch.Tensor, ds: DownscaleDataset,
     loss = y.new_zeros(())
     if "temp" in tasks and "temp" in out:
         ti = ds.target_index("tmp")
-        loss = loss + w["temp"] * temp_loss(
-            out["temp"], y[:, ti:ti + 1], w.get("ssim", 0.2),
-            base=w.get("pixel_loss", "l1"), mask=mask)
+        # offset_weight is None -> the original single-term loss. Set it and the
+        # loss splits into (spatial pattern) + offset_weight * (daily bias),
+        # which is the README 5.4 decomposition made explicit.
+        ow = w.get("offset_weight")
+        if ow is None:
+            loss = loss + w["temp"] * temp_loss(
+                out["temp"], y[:, ti:ti + 1], w.get("ssim", 0.2),
+                base=w.get("pixel_loss", "l1"), mask=mask)
+        else:
+            loss = loss + w["temp"] * decomposed_loss(
+                out["temp"], y[:, ti:ti + 1], mask=mask,
+                offset_weight=float(ow), ssim_weight=w.get("ssim", 0.2),
+                base=w.get("pixel_loss", "l1"))
     return loss
 
 
@@ -142,11 +152,22 @@ def main(overrides: dict) -> None:
     zarr = overrides.get("zarr") or tcfg["data"]["zarr"]
     norm = str(Path(zarr).parent / "norm_stats.json")
     patch = tcfg["data"]["patch_size"]
+    if overrides.get("patch_size") is not None:
+        # 0 means "no cropping": the decomposed loss needs the whole field to
+        # compute a domain mean, and a 48x48 patch mean is a poor stand-in for
+        # it (proxy error sd 0.376 against an offset sd of 0.463).
+        patch = None if int(overrides["patch_size"]) <= 0 \
+            else int(overrides["patch_size"])
     # Spatial holdout: training and validation patches both avoid the
     # evaluation region, so model SELECTION never sees it either.
     dcfg = load_config("data")
     holdout = dcfg.get("holdout")
     ppS = tcfg["data"].get("patches_per_sample", 1)
+    if patch is None and ppS > 1:
+        # Drawing N "patches" from an uncropped field yields N identical copies
+        # of the same day — N times the compute for no new information.
+        print(f"[train] patch_size=None, so patches_per_sample {ppS} -> 1")
+        ppS = 1
     # Covariate ablations select a subset of the superset store's channels.
     use_ch = overrides.get("use_channels") or dcfg["dataset"].get("use_channels")
     train_ds = DownscaleDataset(zarr, norm, "train", patch, tcfg["seed"],
@@ -160,8 +181,14 @@ def main(overrides: dict) -> None:
                               holdout=holdout,
                               holdout_mode="exclude" if holdout else None,
                               use_channels=use_ch)
+    # Workers are respawned every epoch and each one opens the store. On a small
+    # local Zarr that churn can dominate when the machine is already under
+    # memory pressure, so allow 0 (load in-process). Default stays the config
+    # value so cluster runs are unaffected.
+    n_workers = tcfg["data"]["num_workers"] if overrides.get("num_workers") is None \
+        else int(overrides["num_workers"])
     train_ld = DataLoader(train_ds, batch_size=tcfg["data"]["batch_size"],
-                          shuffle=True, num_workers=tcfg["data"]["num_workers"],
+                          shuffle=True, num_workers=n_workers,
                           drop_last=True)
     val_ld = DataLoader(val_ds, batch_size=1, shuffle=False)
 
@@ -210,7 +237,20 @@ def main(overrides: dict) -> None:
         w["ssim"] = float(overrides["ssim_weight"])
     if overrides.get("pixel_loss"):
         w["pixel_loss"] = overrides["pixel_loss"]
-    print(f"[train] loss: {w.get('pixel_loss','l1')} + {w['ssim']}*(1-SSIM)")
+    if overrides.get("offset_weight") is not None:
+        w["offset_weight"] = float(overrides["offset_weight"])
+        if patch is not None:
+            raise SystemExit(
+                f"--offset-weight needs full fields but patch_size={patch}. A "
+                f"patch mean is a poor proxy for the domain offset (proxy error "
+                f"sd 0.376 vs offset sd 0.463), so the split would remove real "
+                f"spatial structure instead of the bias. Pass --patch-size 0.")
+    if w.get("offset_weight") is None:
+        print(f"[train] loss: {w.get('pixel_loss','l1')} + "
+              f"{w['ssim']}*(1-SSIM)")
+    else:
+        print(f"[train] loss: DECOMPOSED — {w.get('pixel_loss','l1')}(de-meaned)"
+              f" + {w['ssim']}*(1-SSIM) + {w['offset_weight']}*|daily offset|")
     # Per-arch subdirectory: comparison runs must not overwrite each other's
     # best.pt. 'swin' keeps the flat path so existing checkpoints stay valid.
     # run_name keeps seed repeats in separate directories; ckpt_path() resolves
@@ -266,8 +306,8 @@ def main(overrides: dict) -> None:
                             "cfg": dict(mcfg)}, ckpt_dir / "best.pt")
                 print(f"[train] saved best (rmse={score:.4f})")
                 tracker.summary("best/val_rmse", best)
-    torch.save({"model": model.state_dict(), "cfg": dict(mcfg)},
-               ckpt_dir / "last.pt")
+    torch.save({"model": model.state_dict(), "epoch": epoch,
+                "cfg": dict(mcfg)}, ckpt_dir / "last.pt")
     tracker.finish()
     print("[train] done")
 
@@ -281,7 +321,16 @@ if __name__ == "__main__":
                     help="checkpoint subdirectory, e.g. deepsd_s1")
     ap.add_argument("--ssim-weight", type=float, default=None,
                     help="override loss_weights.ssim (0.0 = pure pixel loss)")
-    ap.add_argument("--pixel-loss", default=None, choices=["l1", "mse"],
+    ap.add_argument("--offset-weight", type=float, default=None,
+                    help="split the loss into spatial pattern + this weight "
+                         "times the uniform daily offset (README 5.4). Needs "
+                         "--patch-size 0: a patch mean is a poor proxy for the "
+                         "domain offset. Unset = the original single-term loss.")
+    ap.add_argument("--patch-size", type=int, default=None,
+                    help="override data.patch_size; 0 = train on full fields")
+    ap.add_argument("--num-workers", type=int, default=None,
+                    help="override data.num_workers (0 = load in-process)")
+    ap.add_argument("--pixel-loss", default=None, choices=["l1", "mse", "amse"],
                     help="override loss_weights.pixel_loss")
     ap.add_argument("--precision", default=None, choices=["bf16", "fp16", "fp32"],
                     help="override configs/train.yaml precision. USE fp32 ON GPU: "
@@ -302,4 +351,6 @@ if __name__ == "__main__":
     main({"epochs": args.epochs, "arch": args.arch, "zarr": args.zarr,
           "use_channels": args.use_channels, "precision": args.precision,
           "seed": args.seed, "run_name": args.run_name,
-          "ssim_weight": args.ssim_weight, "pixel_loss": args.pixel_loss})
+          "ssim_weight": args.ssim_weight, "pixel_loss": args.pixel_loss,
+          "num_workers": args.num_workers,
+          "offset_weight": args.offset_weight, "patch_size": args.patch_size})

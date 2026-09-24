@@ -19,7 +19,10 @@ import sys
 import time
 from pathlib import Path
 
-ALL_ARCHS = ["swin", "unet", "deepsd", "swinir", "restormer", "segformer", "vit",
+# "linear" is the affine headroom PROBE (models/linear_probe.py), not a
+# contender: it exists to show how much of DeepSD's skill needs a
+# nonlinearity at all. Excluded from run_all sweeps by default.
+ALL_ARCHS = ["swin", "unet", "deepsd", "linear", "swinir", "restormer", "segformer", "vit",
              "maxvit", "convnext", "edsr", "esrt", "swinir_light"]
 
 # Cheap models first (the user's "baselines before transformers" ordering):

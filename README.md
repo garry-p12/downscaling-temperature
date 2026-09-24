@@ -45,6 +45,24 @@ evaluated on a region no model ever trained on.
    (§5.4). Every null result above follows from that.
 5. **ERA5-Land is the accuracy ceiling.** It is itself 0.90–0.96 °C from station
    observations — further than the gap between our best and worst model.
+6. **The loss was part of the problem.** Trained under a pixel loss the output is
+   16× smoother than its grid — effective resolution 165 km at 10 km (§5.5).
+   Splitting the loss along the §5.4 budget, so the model stops being charged
+   for a daily bias it cannot fix, gains **+0.0415 residual correlation at 4.5×
+   seed noise** (§5.6). It buys spatial structure, not fine-scale phase: the
+   remaining deficit looks like an information limit.
+7. **Acting on the error budget beats modelling harder.** The daily bias is not
+   one number but a smooth spatial FIELD. Regressing it on a 6x6 grid of
+   training-region block means — using no holdout truth at all — cuts RMSE
+   **30.4% across 8 checkpoints**, which is **89% of the oracle** (§5.7). A
+   single domain mean gets only 38%. This is by far the largest effect in the
+   project, and it comes from arithmetic on the error budget rather than from
+   any model change.
+8. **A linear control says capacity is not the constraint.** A 2.2k-parameter
+   affine model reaches within 4.7× seed noise of DeepSD overall, and *beats* it
+   below 60 km (coherence 0.156 vs 0.088, 11.5× noise): the deep model
+   manufactures fine-scale structure less correlated with truth than a linear
+   one does. Nonlinearity earns only +0.010 coherence, in the 60–165 km band.
 
 ---
 
@@ -310,6 +328,239 @@ across days. In anomaly space over the holdout, the interpolated field scores
 *true* offset gives 0.5829. A two-parameter time-series model recovers more than
 any covariate change tested.
 
+### 5.5 Effective resolution — the field is 16× smoother than its grid
+
+None of the metrics above reports whether the output has the right *amount* of
+fine-scale variance. It does not. Measured over the holdout on 365 test days
+with a windowed 2D DFT (`python -m evaluation.spectral`):
+
+| Wavelength | Amplitude ratio | Coherence |
+|---|---|---|
+| 495 km | 0.958 | 0.985 |
+| 165 km | 0.800 | 0.568 |
+| 99 km | **0.629** | 0.408 |
+| 55 km | **0.472** | 0.247 |
+| 38 km | **0.421** | 0.108 |
+
+Amplitude ratio is `sqrt(PSD_model / PSD_truth)`; 1.0 means correct variance.
+Taking the standard threshold of `sqrt(0.75)` — a quarter of the per-wavenumber
+energy lost — **effective resolution is ~165 km on a 10 km grid.**
+
+This is not a bug, it is what the loss asks for. Under a pixel loss, if a scale
+has correlation ρ < 1 the loss-optimal amplitude is ρ, so the model minimises
+its loss by *shrinking* what it cannot predict rather than predicting it
+(Subich et al. 2025, ICML, arXiv:2501.19374). The measured amplitude ratio
+tracks the measured coherence down the whole column, which is that prediction.
+L1 blurs less than MSE but still blurs — the paper's own ablation (appendix B.5)
+finds the same.
+
+Two consequences worth stating:
+
+- **It caps the covariate results.** §5.2 attributes the null results to static
+  covariates reaching only the 2.8% spatial slice. That holds, but the loss was
+  *also* suppressing the fine-scale amplitude those metrics measure, so some of
+  the structural headroom was never on offer to any channel set.
+- **V0's apparent sharpness is noise.** Run the same diagnostic on `v0_base`
+  and the amplitude ratio rises to 2.0–6.7 below 30 km — with coherence at 0.0
+  to *negative*. That is uncorrelated noise, not recovered signal, and it is
+  consistent with V2 winning on SSIM: V2 is smoother but clean.
+
+`training/losses.py` implements AMSE, the paper's fix, adapted from spherical
+harmonics to a windowed 2D DFT for this limited-area grid (`--pixel-loss amse`).
+Whether it helps *this* variable is an open question and deliberately not
+assumed: the paper's own appendix B.3 finds essentially no effect on 2 m
+temperature, which it attributes to elevation anchoring the fine scales — the
+exact setup used here. The counter-argument is that their 2 m temperature was
+not measurably smooth, and ours is.
+
+Note before reading any result from it: **sharpening should make RMSE slightly
+worse.** Loss-optimal smoothing minimises RMSE by construction. Given §5.4, that
+is a trade worth making, but it is pre-registered here rather than discovered
+afterwards.
+
+### 5.6 Splitting the loss along the error budget — the largest effect measured
+
+§5.4 says half the holdout residual is a spatially uniform daily offset that no
+spatial model can fix, and that it is separately predictable from its own lag-1.
+The loss charged for it anyway, so gradient that could have bought spatial
+structure was spent chasing a bias. `training/losses.py decomposed_loss` makes
+the split explicit:
+
+```
+loss = spatial(pred − μ_p, target − μ_t) + offset_weight · |μ_p − μ_t|
+```
+
+Three arms, DeepSD, V2 channels, five seeds each. The full-field control is not
+optional: without it, the offset arm would confound two changes at once.
+
+| Arm | RMSE °C | SSIM | resid corr |
+|---|---|---|---|
+| `v2_landcov` (published baseline, patched) | 0.7834 ±0.0122 | 0.8007 ±0.0026 | 0.5003 ±0.0061 |
+| `of1` — full fields, offset_weight 1.0 | 0.7906 ±0.0056 | 0.7959 ±0.0021 | 0.4846 ±0.0052 |
+| `of0` — full fields, offset_weight 0.0 | 0.7869 ±0.0210 | **0.8028** ±0.0008 | **0.5261** ±0.0055 |
+
+| Contrast | RMSE | SSIM | resid corr |
+|---|---|---|---|
+| full fields alone (`of1` − base) | +0.0072 | −0.0047 | **−0.0157** |
+| offset removed (`of0` − `of1`) | −0.0038 | +0.0069 | **+0.0415** |
+
+**Removing the offset penalty gains +0.0415 residual correlation at 4.5× the
+between-seed sd** (0.0092) — the largest single effect in this project, ahead of
+Restormer's +0.0363 at 3.6× (§5.3). Against the published baseline directly it
+is +0.0258, still 2.8× noise. Full-field training *by itself* slightly hurt,
+which is exactly why the control arm exists: quoting `of0` against the baseline
+alone would misattribute the mechanism.
+
+**A pre-registered prediction that was wrong.** §5.5 committed to `of0`'s raw
+RMSE getting worse, since it has no offset term by construction. It did not —
+0.7869 against 0.7834, inside the seed sd. The reason is that `coarse_tmp`
+carries the offset in the *input*: removing the penalty stopped the model being
+charged for the bias without stopping it reproducing one (bias 0.0983 vs 0.1174).
+The capacity was freed at no RMSE cost.
+
+**The spectra say the gain is not fine-scale phase.** Mean over the 22–99 km band:
+
+| | baseline | `of1` | `of0` |
+|---|---|---|---|
+| amplitude ratio | 0.552 | 0.641 | **0.658** |
+| coherence | 0.144 | 0.129 | 0.131 |
+
+Amplitude improves substantially — at 22 km it goes 0.638 → 0.961 — while
+coherence is flat (−0.0135, 1.1× noise). Effective resolution stays 165 km for
+all three arms. At 22–26 km `of0` reaches amplitude ~0.96 at coherence ~0.02:
+matching variance while uncorrelated is realistic-looking noise, not skill, and
+is the "noise-based effective resolution" the source paper warns about. So the
+result supports the fine-scale deficit being an **information limit rather than
+a loss limit** — a deterministic model whose only time-varying input is a smooth
+interpolated field has no source for correct-amplitude fine-scale anomalies.
+
+**Two caveats.** `of0` is less stable across seeds than the baseline: RMSE sd
+0.0210 vs 0.0122, p95 bias sd 0.2437 vs 0.0459. The mean improved, the variance
+got worse. And a single-seed pilot of this work pointed the *opposite* way
+(coherence up, amplitude flat); five seeds reversed it, which is §5.1's lesson
+applying to our own method work.
+
+Reproduce with `slurm/vista_ofs_of1.sh` and `slurm/vista_ofs_of0.sh`, then
+`slurm/vista_ofs_eval.sh`. The decomposition requires full fields: the offset has
+sd 0.463 °C while the gap between a 48×48 patch mean and the true domain mean has
+sd 0.376, so splitting on a patch mean removes real structure rather than bias.
+`--offset-weight` refuses to run without `--patch-size 0` for that reason.
+
+### 5.7 Correcting the offset — the largest RMSE gain in the project
+
+§5.6 stopped the model being *charged* for the uniform daily bias. This estimates
+that bias and subtracts it. `evaluation/offset_correction.py`.
+
+**The estimators are separated by what they assume, because that is the whole
+argument.** §5.4 quoted an AR(1) fit on the holdout's own offset history, which
+silently requires yesterday's truth *in the region being predicted* — strictly
+more information than an uncorrected model gets, so it is not a fair head-to-head.
+The alternative uses the 50.8% finding directly: if the offset is spatially
+uniform, measure it over the **training region on the same day** and apply it to
+the holdout. That uses no holdout truth at all and needs no time-series model.
+
+| Arm | seeds | uncorrected | **spatial** | gain | ar(1) | *oracle* | offset corr |
+|---|---|---|---|---|---|---|---|
+| `v0_base` | 1 | 0.8024 | 0.7085 | −11.7% | 0.7340 | *0.5376* | 0.601 |
+| `v2_landcov` | 3 | 0.8040 | 0.7144 | −11.1% | 0.7380 | *0.5443* | 0.594 |
+| `of1` | 1 | 0.7966 | 0.7091 | −11.0% | 0.7288 | *0.5343* | 0.590 |
+| **`of0`** | 5 | 0.8065 | **0.6867** | **−14.8%** | 0.7204 | *0.5163* | **0.678** |
+
+Across all 10 checkpoints: **−13.0% RMSE, sd 2.1** — and a better estimator of
+the same quantity more than doubles that, see below.
+
+**The assumption-free estimator beats AR(1) on every single checkpoint**, using
+strictly less information. That reverses §5.4's framing: the offset is better
+recovered from *elsewhere in space on the same day* than from *the same place
+yesterday*. Spatial sharing beats temporal persistence here.
+
+**§5.6 and this correction compound.** `of0` — the arm trained with the offset
+penalty removed — starts worst uncorrected (0.8065) and finishes best corrected
+(0.6867), with the highest train↔holdout offset correlation (0.678 against
+~0.59). Training the model to stop fitting the daily bias left a residual bias
+that is *more spatially uniform*, and therefore more correctable from elsewhere.
+The two interventions were designed independently and reinforce each other.
+
+For scale: covariate engineering moved RMSE by ~0 (§5.2), architecture by ~0
+(§5.1), and the §5.6 loss moved structure but not RMSE. This moves RMSE by
+**13%** with no new data, no retraining and no extra information.
+
+**The bias is a FIELD, not a number — and that is worth most of the ceiling.**
+A single domain mean throws away the spatial structure of the bias. Splitting
+the training region into a k x k grid of blocks and regressing the holdout
+offset on those block means (ridge, fit on the train split only, still using no
+holdout truth of any kind) recovers most of the gap. Mean over 8 checkpoints:
+
+| Estimator | features | gain | % of oracle |
+|---|---|---|---|
+| single global mean | 1 | −12.9% | 38% |
+| sub-regions k=3 | 9 | −25.5% | 75% |
+| **sub-regions k=6** | **36** | **−30.4%** (sd 1.8) | **89%** |
+| *oracle (true holdout offset)* | — | *−34.1%* | *100%* |
+
+The per-checkpoint "% of oracle" runs 88–90% on every one of the eight, across
+two training recipes — this is not a single-checkpoint artefact. A k-sweep puts
+the knee at k=6: monotonic improvement to k=6, a plateau through k=12 (−35.2%
+on `of0_s1337`), then degradation at k=16 (−32.7%) as the blocks start fitting
+train-split noise. Adding lag-1, season and coarse-field state **on top** of the
+sub-regions made it worse (−28.8% vs −29.5% at k=3): once spatial structure is
+in the model those features are redundant and only cost degrees of freedom.
+
+This revises §5.4's framing. "50.8% spatially uniform daily offset" understates
+what is there: it is a smooth spatial bias field, and treating it as one number
+was discarding most of the recoverable signal. What remains after k=6 is ~11%
+of the offset variance — the genuinely unpredictable part.
+
+**Caveats.** All numbers use `last.pt`, so the uncorrected baselines sit above
+§5.2's `best.pt` figures; the comparison within this table is like-for-like. A
+single-seed reading of `of0` gave −17.1%; five seeds give −14.8%, so the pilot
+overstated it — the same lesson as §5.1 and §5.6. `v0_base` and `of1` are
+single-seed and included for spread, not as estimates.
+
+
+### 5.8 A linear control — is nonlinear capacity the constraint?
+
+Before designing a new architecture, a prior question: how much of DeepSD's
+skill actually needs its nonlinearity? `models/linear_probe.py` is the control —
+a residual corrector through a single 13×13 conv over all 13 channels with **no
+activation anywhere**, initialised to zero so epoch 0 *is* the interpolation
+baseline. **2,198 parameters against DeepSD's 210,000.** Identical protocol to
+the published `v2_landcov` arm; the only difference is the nonlinearity.
+
+| | linear (5 seeds) | DeepSD (3 seeds) | Welch t |
+|---|---|---|---|
+| RMSE | 0.8244 ±0.0262 | **0.7841** ±0.0133 | −2.9 |
+| SSIM | 0.7973 ±0.0019 | 0.7988 ±0.0038 | +0.6 (tied) |
+| resid corr | 0.4591 ±0.0154 | **0.4951** ±0.0085 | +4.3 |
+| p95 bias | +0.5160 ±0.1177 | **−0.0702** ±0.0654 | −9.1 |
+
+Overall the nonlinearity earns its place — but the per-scale picture inverts.
+
+| Band | linear | DeepSD | Δ coherence | Welch t | |
+|---|---|---|---|---|---|
+| 165–495 km | 0.984 | 0.984 | +0.001 | +3.1 | statistically real, practically nil |
+| **60–165 km** | 0.414 | **0.424** | **+0.010** | +4.3 | the only band it helps |
+| **20–60 km** | **0.156** | 0.088 | **−0.068** | **−9.3** | **linear is better** |
+
+**Below 60 km the deep model is worse than an affine one.** The amplitudes say
+why: in that band DeepSD produces amplitude ratio 0.536 against linear's 0.163 —
+more than three times the variance — at *lower* coherence. It is not resolving
+fine structure, it is manufacturing plausible-looking structure that is less
+correlated with truth than the little a linear model emits.
+
+Note the coarse band as a caution on reading significance: t = +3.1 on a
+difference of +0.001. The seed spreads are so small there that a trivial
+difference is statistically resolvable. Statistical and practical significance
+are not the same thing, and this table contains an example of each.
+
+**What this means for architecture work.** The total value of nonlinearity, in
+the only band where it helps, is +0.010 coherence. A new architecture competes
+for a slice of that — against §5.7's 13% RMSE, which came from arithmetic on the
+error budget rather than from modelling. It also suggests a cheaper experiment
+than a new model: if capacity below 60 km is actively harmful, *suppressing*
+generation there (a spectral penalty, or low-passing the increment at inference)
+should help, and costs a day rather than weeks. That test is untried.
+
 ---
 
 ## 6. Station validation and the ceiling
@@ -515,7 +766,11 @@ The evidence points away from the model and toward the target and the bias term.
    The daily offset behaves like a synoptic signal; this is the first channel
    class that could touch the 50.8%.
 2. **An explicit bias-correction term.** A lagged-offset channel, or post-hoc AR
-   correction. Worth ~12% off the interpolation error immediately (§5.4).
+   correction. Worth ~12% off the interpolation error immediately (§5.4). §5.6
+   is the first half of this and it worked: removing the offset from the LOSS
+   bought spatial skill at no RMSE cost. The other half — predicting the offset
+   with AR(1) and adding it back at inference — is untested and is now the
+   single highest-value open item.
 3. **Report the error budget as a standard diagnostic**, so spatial skill is not
    buried under a bias term.
 4. **Fix the skill floor** (§8.6) — three lines, and it corrects every published

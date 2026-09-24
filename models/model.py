@@ -91,6 +91,11 @@ def build_model(model_cfg: dict) -> nn.Module:
         return UNetDownscaler(model_cfg["in_channels"],
                               base=cfg.get("base", 96),
                               depth=cfg.get("depth", 4))
+    if arch == "linear":
+        from .linear_probe import LinearProbe
+
+        cfg = model_cfg.get("linear", {})
+        return LinearProbe(model_cfg["in_channels"], k=cfg.get("k", 13))
     if arch == "deepsd":
         from .deepsd import DeepSD
 
