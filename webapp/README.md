@@ -105,7 +105,7 @@ npm run build:static     # -> out/, 3.1 MB
 npm run preview:static   # serve it locally on :4321
 ```
 
-**Netlify.** `netlify.toml` is committed and sets everything: base directory
+**Netlify.** `netlify.toml` (at the repository root, where Netlify looks for it) is committed and sets everything: base directory
 `webapp` (this app lives inside a Python research repository, so npm must not
 run from the repo root), `npm run build:static`, publish `out`. Connect the
 repo and it builds with no plugin and no functions. `public/_headers` carries
