@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { prepare } from "@/lib/grid";
 import { token } from "@/lib/color";
-import { signed } from "@/lib/format";
 import Info from "./Info";
 import Segmented from "./Segmented";
 import type { Manifest } from "@/lib/types";
@@ -144,15 +143,22 @@ export default function Scrubber({
         </button>
         <span className="daylabel">{manifest.dates[mapDay]}</span>
         <span className="dayoff">
-          model was off by {signed(trueOffsets[dayIndex])} °C
-          {methodApplies ? (
-            <>
-              {" \u00b7 we added "}
-              <b>{signed(appliedOffset)}</b>
-            </>
-          ) : (
-            " \u00b7 nothing added"
-          )}
+          {/*
+            Direction in words, not a signed number.
+
+            The store holds `truth - model`, because that is the quantity you
+            ADD to the prediction to correct it. The maps display the opposite,
+            `model - truth`, so that red reads as "too warm". Printing the raw
+            stored number beside the maps put a "+0.437" next to a blue box and
+            told the reader the model ran warm when it ran cold. No sign
+            convention is self-evident to someone reading a label, so this says
+            which way round it is.
+          */}
+          model ran <b>{Math.abs(trueOffsets[dayIndex]).toFixed(2)} °C</b> too{" "}
+          {trueOffsets[dayIndex] >= 0 ? "cold" : "warm"}
+          {methodApplies
+            ? ` \u00b7 we ${appliedOffset >= 0 ? "warmed" : "cooled"} it by ${Math.abs(appliedOffset).toFixed(2)}`
+            : " \u00b7 nothing applied"}
         </span>
       </div>
 
