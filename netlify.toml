@@ -6,12 +6,23 @@
 # instead, which Netlify serves as plain files — no @netlify/plugin-nextjs, no
 # cold starts, no function invocations to pay for.
 #
+# This file must live at the repository root: Netlify only looks for
+# netlify.toml there (or in a base directory already set in the UI). When it
+# sat in webapp/, Netlify never saw it, built nothing and published the repo
+# root, which has no index.html — so every URL was a 404.
+#
 # `base` matters: this app lives in a subdirectory of a Python research
-# repository, so Netlify has to run npm from here, not from the repo root.
+# repository, so Netlify has to run npm from webapp/, not from the repo root.
+# `publish` is resolved relative to `base`, i.e. webapp/out.
+#
+# The command installs dependencies itself (`npm ci`, pinned by
+# package-lock.json) because not every build path runs an install first —
+# `netlify deploy` from the CLI goes straight to the command, and without this
+# it fails with `next: not found`.
 
 [build]
   base    = "webapp"
-  command = "npm run build:static"
+  command = "npm ci --no-audit --no-fund && npm run build:static"
   publish = "out"
 
 [build.environment]
