@@ -79,7 +79,7 @@ export default function Shell({ manifest }: { manifest: Manifest }) {
   if (status === "error") {
     return (
       <div className="card problem">
-        <h3>Could not load the field data</h3>
+        <h3>Could not load the map data</h3>
         <p className="hint" style={{ marginTop: 8 }}>
           {error}
         </p>

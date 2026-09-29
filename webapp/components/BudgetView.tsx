@@ -23,24 +23,33 @@ export default function BudgetView({ manifest }: { manifest: Manifest }) {
         <h2>Why this was worth doing at all</h2>
         <Info label="Why this was worth doing at all">
           <p>
-            Split the <b>task residual</b> &mdash; truth minus the interpolated NASA
-            POWER input, which is the signal any downscaler is asked to produce
-            &mdash; into three parts that cannot overlap, so the shares sum to 100%.
-            Total variance over the box is{" "}
-            {manifest.budget.totalVar.toFixed(4)} °C².
+            Take the whole job the model is asked to do and split it into three
+            parts that don&rsquo;t overlap. They add up to 100%.
           </p>
           <p>
-            Only the middle bar is reachable by a map of terrain or land cover:
-            those inputs are fixed in time, so they can only address the part of the
-            error that is also fixed in time. That is{" "}
-            {(manifest.budget.box.static * 100).toFixed(1)}% of it, which is why ten
-            architectures and five covariate sets all tied.
+            <b>Uniform daily offset</b> &mdash; the whole map is off by the same
+            amount today, a different amount tomorrow. Half the job.
           </p>
           <p>
-            <b>What the model left</b> switches to the trained model&rsquo;s own
-            residual. It moved the static term and left the offset at{" "}
-            {(manifest.budget.model.offset * 100).toFixed(1)}%, essentially where it
-            found it.
+            <b>Static spatial pattern</b> &mdash; certain places are always wrong,
+            in the same way, every single day.
+          </p>
+          <p>
+            <b>Space&ndash;time remainder</b> &mdash; everything else.
+          </p>
+          <p>
+            Here&rsquo;s the catch. Maps of terrain and land cover never change
+            from one day to the next, so they can only help with the{" "}
+            <em>middle</em> part &mdash; just{" "}
+            {(manifest.budget.box.static * 100).toFixed(1)}% of the job. That is
+            why ten different neural networks all scored the same: they were
+            competing over a sliver.
+          </p>
+          <p>
+            <b>What the model left</b> shows the same split for the errors still
+            there after training. The model shrank the middle part and barely
+            touched the big one &mdash; it is still{" "}
+            {(manifest.budget.model.offset * 100).toFixed(1)}%.
           </p>
         </Info>
         <span className="spacer" />
@@ -76,11 +85,12 @@ export default function BudgetView({ manifest }: { manifest: Manifest }) {
       </div>
 
       <p className="hint" style={{ marginTop: 18, maxWidth: "76ch" }}>
-        Bars are the {manifest.meta.boxCells.toLocaleString()} land cells inside the
-        held-out box. The offset is close to uniform <em>inside</em> the box (
-        {(manifest.budget.box.offset * 100).toFixed(1)}%) but not across the whole
-        domain ({(manifest.budget.domain.offset * 100).toFixed(1)}%), which is
-        exactly why {manifest.meta.blocks} block means beat one global average.
+        Measured over the {manifest.meta.boxCells.toLocaleString()} squares of land
+        inside the test box. Within that box the daily error really is close to one
+        single number ({(manifest.budget.box.offset * 100).toFixed(1)}%). Across all
+        of Texas it isn&rsquo;t ({(manifest.budget.domain.offset * 100).toFixed(1)}%)
+        &mdash; it drifts from place to place. That is why splitting the map into{" "}
+        {manifest.meta.blocks} squares beats taking one average.
       </p>
     </>
   );

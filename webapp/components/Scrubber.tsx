@@ -95,7 +95,7 @@ export default function Scrubber({
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.fillText(
-      `true daily offset over the held-out box · ±${lim.toFixed(1)} °C`,
+      `how far off the model was, each day of the year · scale ±${lim.toFixed(1)} °C`,
       2,
       2,
     );
@@ -144,16 +144,15 @@ export default function Scrubber({
         </button>
         <span className="daylabel">{manifest.dates[mapDay]}</span>
         <span className="dayoff">
-          true {signed(trueOffsets[dayIndex])}
+          model was off by {signed(trueOffsets[dayIndex])} °C
           {methodApplies ? (
             <>
-              {" \u00b7 applied "}
+              {" \u00b7 we added "}
               <b>{signed(appliedOffset)}</b>
             </>
           ) : (
-            " \u00b7 nothing applied"
-          )}{" "}
-          °C
+            " \u00b7 nothing added"
+          )}
         </span>
       </div>
 
@@ -161,16 +160,17 @@ export default function Scrubber({
         <span className="rangelab">range</span>
         <Info label="Colour range">
           <p>
-            The half-range of the error maps, in °C. The domain-wide 99.7th
-            percentile of |error| is about 3.1 °C, and on that scale a typical
-            0.36 °C offset is a shade of the same pink &mdash; the comparison would
-            show nothing.
+            How big a temperature difference the strongest red and blue stand
+            for, in °C.
           </p>
           <p>
-            These three come from the <b>held-out box&rsquo;s own</b> |error|
-            distribution, at its {scaleQ === 70 ? "70th, 90th and 98th" : "70/90/98th"}{" "}
-            percentiles. Cells beyond the chosen range clip rather than rescale, so
-            the two maps always share one scale.
+            Keep it small (±0.80) and small changes are easy to spot. Make it
+            large and everything washes out to pale pink, because a handful of
+            extreme spots stretch the scale and flatten everything else.
+          </p>
+          <p>
+            Anything past the limit just shows as the strongest colour. Both maps
+            always use the same setting, so they stay comparable.
           </p>
         </Info>
         {levels && (

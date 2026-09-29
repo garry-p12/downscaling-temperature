@@ -55,17 +55,23 @@ export default function YearView({
         <h2>Over the whole year</h2>
         <Info label="Over the whole year">
           <p>
-            One day can flatter a method, so these are all{" "}
-            {manifest.meta.nTestDays} test days at once: the root-mean-square error
-            in each cell across the year, before and after the correction, on one
-            shared colour scale.
+            A single day can be lucky. These maps use all{" "}
+            {manifest.meta.nTestDays} test days at once. Each square shows how
+            wrong the model typically is there across the year &mdash; darker is
+            worse.
           </p>
           <p>
-            <b>The mechanism check</b> is the pair of numbers under the ladder. The
-            correction subtracts one number per day, so if it is really removing the
-            bias the error budget describes, the time-mean error should collapse
-            while RMSE moves more modestly. It does. A correction that improved RMSE
-            without collapsing the bias would be doing something else.
+            The bars on the right are the score for the whole year, one per
+            method. Lower is better, and the orange bar is the best anyone could
+            do.
+          </p>
+          <p>
+            <b>The two numbers underneath</b> are worth reading together.{" "}
+            <em>Mean error</em> is whether the model runs warm or cold on average.{" "}
+            <em>RMSE change</em> is how much smaller its mistakes got. The
+            correction almost wipes out the first and only partly reduces the
+            second &mdash; exactly what should happen if the problem really is a
+            once-a-day bias rather than a general lack of detail.
           </p>
         </Info>
         <span className="spacer" />
@@ -82,7 +88,7 @@ export default function YearView({
           <figcaption className="cardhead">
             <span className="cardtitle">
               Per-cell RMSE, model
-              <span className="cardsub">whole test year</span>
+              <span className="cardsub">all 365 test days</span>
             </span>
           </figcaption>
           {fields ? (
@@ -133,7 +139,7 @@ export default function YearView({
           <div className="cardhead">
             <span className="cardtitle">
               Year RMSE, held-out box
-              <span className="cardsub">orange = ceiling</span>
+              <span className="cardsub">lower is better</span>
             </span>
           </div>
           <Bars rows={rows} max={Math.max(...rows.map((r) => r.value)) * 1.06} />
@@ -157,24 +163,28 @@ export default function YearView({
           <h3>Does it only work for Austin?</h3>
           <Info label="Does it only work for Austin?">
             <p>
-              The same estimator run five times, with a different region held out
-              each time. <b>Per cent of oracle</b> is the comparable column: it is a
-              ratio taken inside each region, so terrain differences don&rsquo;t
-              distort it.
+              We ran the same method five times, each time hiding a different part
+              of Texas and predicting it from everywhere else.
             </p>
             <p>
-              <b>One caveat.</b> The checkpoint was trained with Austin held out, so
-              for the other four regions the model has already seen those cells and
-              their model RMSE is optimistic. What generalises here is the{" "}
-              <em>estimator</em> &mdash; whether a region&rsquo;s daily bias can be
-              recovered from the rest of the domain &mdash; not a second measurement
-              of model skill.
+              <b>% of oracle is the column to read.</b> It says how much of the
+              best possible improvement the method actually got. It is fair to
+              compare across regions because it is measured inside each one
+              separately &mdash; rough terrain is harder everywhere, and this
+              cancels that out.
+            </p>
+            <p>
+              <b>One catch.</b> The model was only ever trained with Austin hidden.
+              For the other four regions it had already seen the answers while
+              training, so their &ldquo;model&rdquo; column looks better than it
+              should. What this table really tests is the <em>guessing method</em>,
+              not the model.
             </p>
           </Info>
           <span className="spacer" />
           <span className="hint">
-            {mean(shares).toFixed(0)}% ± {sd(shares).toFixed(0)} of the oracle across
-            five regions
+            averages {mean(shares).toFixed(0)}% of the best possible, across five
+            regions
           </span>
         </div>
         <div className="tablewrap">

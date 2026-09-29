@@ -56,17 +56,22 @@ export default function DayView(p: Props) {
         <h2>The correction, day by day</h2>
         <Info label="The correction, day by day">
           <p>
-            Both maps are the model&rsquo;s error over the same day &mdash; output
-            minus ERA5-Land truth &mdash; on one shared colour scale. Red is too
-            warm, blue too cold. The orange box is the held-out region: it was
-            never in training, and every RMSE quoted here is taken over the{" "}
-            {manifest.meta.boxCells.toLocaleString()} land cells inside it.
+            <b>Left:</b> how wrong the model was on this day.{" "}
+            <b>Right:</b> the same day, after adding one number to every cell.
           </p>
           <p>
-            <b>The correction adds one number to every cell.</b> What changes
-            between the two maps is a constant, so if half the error really is a
-            uniform daily bias, subtracting one well-chosen number should visibly
-            flatten the box.
+            Red means the model was too warm there. Blue means too cold. White
+            means it got that spot about right.
+          </p>
+          <p>
+            The orange box is the area we test on. The model never saw it while
+            training, and every score on this page is measured inside it &mdash;
+            that&rsquo;s {manifest.meta.boxCells.toLocaleString()} squares of land.
+          </p>
+          <p>
+            <b>Why one number can help:</b> on most days the model is off by
+            roughly the same amount everywhere. If that&rsquo;s true, adding the
+            right number should wash most of the colour out of the box.
           </p>
         </Info>
       </div>
@@ -158,22 +163,31 @@ export default function DayView(p: Props) {
               <h3>Where the number comes from</h3>
               <Info label="Where the number comes from">
                 <p>
-                  Each option is a different way of guessing today&rsquo;s offset,
-                  and the figure beside it is the RMSE it achieves on this day.
+                  We need to guess how far off the model is today &mdash; without
+                  looking at the answer inside the box. So we look at how wrong it
+                  is everywhere <em>else</em> in Texas, where we do have answers.
                 </p>
                 <p>
-                  <b>One global mean</b> averages the model&rsquo;s residual over
-                  the whole training region &mdash; one number. <b>k = 6</b> splits
-                  that region into a 6×6 grid, takes {manifest.meta.blocks} block
-                  means and learns which combination best predicts the held-out
-                  region&rsquo;s offset; the ridge is fitted on training days only,
-                  so every test-day estimate is out of sample. Neither reads
-                  held-out truth.
+                  <b>No correction</b> &mdash; leave the model alone.
                 </p>
                 <p>
-                  <b>Oracle</b> is the true value, computed by looking at the
-                  answer. It is not a method &mdash; it is the ceiling, there so the
-                  others have something to be judged against.
+                  <b>One global mean</b> &mdash; average how wrong it is across the
+                  rest of Texas. One number for the whole day.
+                </p>
+                <p>
+                  <b>k = 6</b> &mdash; split the rest of Texas into{" "}
+                  {manifest.meta.blocks} squares and learn which of them best
+                  predict what happens in the box. Better, because the model
+                  isn&rsquo;t off by quite the same amount everywhere.
+                </p>
+                <p>
+                  <b>Oracle</b> &mdash; the real answer, looked up. This is
+                  cheating. It&rsquo;s here to show the best any of this could
+                  possibly do.
+                </p>
+                <p>
+                  The number beside each option is the error it leaves behind on
+                  this day. Smaller is better.
                 </p>
               </Info>
             </div>
@@ -205,18 +219,16 @@ export default function DayView(p: Props) {
               <h3>Estimated vs. true offset</h3>
               <Info label="Estimated vs. true offset">
                 <p>
-                  Every one of the {manifest.meta.nTestDays} test days. The
-                  horizontal axis is what the estimator guessed from the training
-                  region; the vertical axis is the offset that was actually there.
-                  Points on the dashed line are perfect guesses.
+                  One dot per day, for all {manifest.meta.nTestDays} test days.
+                  Across = what we guessed. Up = what it actually turned out to be.
+                  Dots on the dashed line are perfect guesses.
                 </p>
                 <p>
-                  This is the panel that answers <b>why it works at all</b>: the
-                  single global mean tracks the truth loosely (r ={" "}
-                  {manifest.corr.glob.toFixed(2)}), the {manifest.meta.blocks}-block
-                  ridge tracks it tightly (r = {manifest.corr.est.toFixed(2)}). The
-                  circled point is the day on the maps.
+                  <b>This is why the method works.</b> The blue dots
+                  (splitting Texas into squares) hug the line. The grey dots (one
+                  plain average) scatter much wider.
                 </p>
+                <p>The circled dot is the day shown on the maps.</p>
               </Info>
             </div>
             <div className="legendrow">
