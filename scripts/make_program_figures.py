@@ -155,5 +155,100 @@ def main():
     print("  station_validation.png")
 
 
+
+
+def spectral_figure():
+    """C4/C5: amplitude ratio and coherence vs wavelength, affine vs deep.
+
+    The claim this figure has to carry is the CROSSOVER: the deep model holds
+    more fine-scale amplitude than the affine one while having LESS coherence
+    with truth there. Amplitude alone looks like sharpness; only the pair shows
+    it is manufactured.
+    """
+    import json
+    import re
+
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    src = REPO / "outputs/linear_probe/spectral_5seed.json"
+    if not src.exists():
+        print("  (no spectral_5seed.json)"); return
+    d = json.load(open(src))
+
+    def arm(p):
+        ks = [k for k in d if re.fullmatch(rf"{p}_s\d+", k)]
+        lam = np.array([r["wavelength_km"] for r in d[ks[0]]["spectrum"]])
+        A = np.array([[r["amplitude_ratio"] for r in d[k]["spectrum"]] for k in ks])
+        C = np.array([[r["coherence"] for r in d[k]["spectrum"]] for k in ks])
+        return lam, A, C
+
+    lam, Al, Cl = arm("lin")
+    _, Ad, Cd = arm("v2_landcov")
+    keep = (lam >= 20) & (lam <= 500)
+    lam = lam[keep]; Al, Cl, Ad, Cd = Al[:, keep], Cl[:, keep], Ad[:, keep], Cd[:, keep]
+
+    plt.rcParams.update({"figure.facecolor": SURF, "axes.facecolor": SURF,
+                         "savefig.facecolor": SURF, "text.color": INK,
+                         "font.size": 10.5})
+    fig, ax = plt.subplots(1, 2, figsize=(14.6, 5.6))
+    DEEP, LIN = "#2a78d6", "#eb6834"
+
+    for a, (Y1, Y2, lab, thr) in zip(ax, [
+            (Al, Ad, "amplitude ratio   (1.0 = correct variance)", np.sqrt(0.75)),
+            (Cl, Cd, "coherence with truth   (1.0 = perfectly in phase)", None)]):
+        for Y, c, nm in [(Y2, DEEP, "deep (210k params)"),
+                         (Y1, LIN, "affine control (2.2k params)")]:
+            m, s = Y.mean(0), Y.std(0, ddof=1)
+            a.plot(lam, m, "-o", color=c, lw=2, ms=4.5, label=nm)
+            a.fill_between(lam, m - s, m + s, color=c, alpha=.18, lw=0)
+        a.axvspan(20, 60, color="#c9c6bf", alpha=.28, lw=0, zorder=0)
+        from matplotlib.ticker import FixedLocator, NullFormatter, NullLocator
+        a.set_xscale("log")
+        # Kill the minor decade labels: on a log axis matplotlib adds 3x10^2,
+        # 6x10^1 etc, which collide with the wavelengths we actually want read.
+        a.xaxis.set_minor_locator(NullLocator())
+        a.xaxis.set_minor_formatter(NullFormatter())
+        a.xaxis.set_major_locator(FixedLocator([20, 30, 50, 100, 200, 500]))
+        a.set_xticklabels(["20", "30", "50", "100", "200", "500"])
+        a.invert_xaxis()
+        a.set_xlabel("wavelength (km)   — finer scales to the right",
+                     fontsize=9.5, color=INK2)
+        a.set_ylabel(lab, fontsize=9.5, color=INK2)
+        if thr:
+            a.axhline(thr, ls="--", lw=1.2, color=INK3)
+            a.text(300, thr - .075, "effective-resolution threshold",
+                   fontsize=8, color=INK3)
+        a.legend(fontsize=9, loc="lower left", framealpha=.9)
+        a.tick_params(labelsize=9, color=GRAT, labelcolor=INK3)
+        for sp in ("top", "right"):
+            a.spines[sp].set_visible(False)
+
+    ax[0].set_title("The deep model holds MORE fine-scale variance",
+                    fontsize=12.5, fontweight="semibold", pad=10)
+    ax[1].set_title("...but is LESS in phase with truth there",
+                    fontsize=12.5, fontweight="semibold", pad=10)
+    ax[1].annotate("deep model worse below 60 km\n(Welch t = −9.3)",
+                   xy=(35, Cd[:, lam <= 60].mean()),
+                   xytext=(90, 0.42), fontsize=9, color=INK2,
+                   arrowprops=dict(arrowstyle="->", color=INK3, lw=1.1))
+    fig.suptitle("Capacity is not the constraint — and excess capacity manufactures structure",
+                 x=.006, y=1.0, ha="left", va="top", fontsize=15.5,
+                 fontweight="semibold")
+    fig.text(.006, .935,
+             "Shaded band 20–60 km. Bands are ±1 sd across seeds (5 affine, 3 deep). "
+             "In that band the deep model produces ~3x the variance of an affine one at "
+             "LOWER coherence: amplitude alone reads as sharpness, but the pair shows it "
+             "is not resolving truth. Left panel also gives C5: both models fall below "
+             "the threshold by ~165 km, on a 10 km grid.",
+             ha="left", va="top", fontsize=9.2, color=INK2)
+    fig.tight_layout(rect=(0, 0, 1, .885))
+    fig.savefig(FIG / "spectral_affine_vs_deep.png", dpi=160, bbox_inches="tight")
+    plt.close(fig)
+    print("  spectral_affine_vs_deep.png")
+
+
 if __name__ == "__main__":
     main()
+    spectral_figure()

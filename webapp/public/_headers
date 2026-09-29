@@ -1,0 +1,14 @@
+# Same rules as netlify.toml, for hosts that read _headers instead (Cloudflare
+# Pages, Netlify Drop). Kept in sync by hand — there are only four rules.
+/data/fields.bin
+  Cache-Control: public, max-age=31536000, immutable
+
+/data/manifest.json
+  Cache-Control: no-cache
+
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

@@ -1,0 +1,46 @@
+# Netlify config for the offset-correction bench.
+#
+# The site is a pure static export: app/page.tsx is force-static, there are no
+# API routes, no server actions and no dynamic params, so there is nothing for
+# a serverless function to do. NEXT_STATIC_EXPORT=1 makes next build emit out/
+# instead, which Netlify serves as plain files — no @netlify/plugin-nextjs, no
+# cold starts, no function invocations to pay for.
+#
+# `base` matters: this app lives in a subdirectory of a Python research
+# repository, so Netlify has to run npm from here, not from the repo root.
+
+[build]
+  base    = "webapp"
+  command = "npm run build:static"
+  publish = "out"
+
+[build.environment]
+  NEXT_STATIC_EXPORT = "1"
+  NODE_VERSION       = "22"
+
+# fields.bin is fetched as /data/fields.bin?v=<content hash> (lib/useFields.ts),
+# so a new export is a new URL and this can be cached forever. Caching it
+# WITHOUT that query would be a bug: a stale copy gets paired with a freshly
+# built manifest, and only the byte-length check in useFields catches it.
+[[headers]]
+  for = "/data/fields.bin"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# The manifest is baked into the HTML at build time, but it is also fetchable;
+# never let a stale one linger.
+[[headers]]
+  for = "/data/manifest.json"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy        = "strict-origin-when-cross-origin"

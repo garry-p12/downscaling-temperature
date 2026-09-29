@@ -1,0 +1,11 @@
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# public/data/{manifest.json,fields.bin} ARE tracked, unlike every other build
+# product in this repository. They are 2.4 MB together, and tracking them is
+# what lets someone clone and `npm run dev` without also having the 163 MB zarr
+# store and the checkpoints the exporter reads. The rule they are exempt from
+# exists for 573 MB of checkpoints and 1.8 GB of rasters, not for this.

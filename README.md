@@ -552,7 +552,38 @@ holdout truth of any kind) recovers most of the gap. Mean over 8 checkpoints:
 | *oracle (true holdout offset)* | — | *−34.1%* | *100%* |
 
 The per-checkpoint "% of oracle" runs 88–90% on every one of the eight, across
-two training recipes — this is not a single-checkpoint artefact. A k-sweep puts
+two training recipes — this is not a single-checkpoint artefact.
+
+**Across regions it is 76%, not 89%.** Moving the held-out box to four further
+regions (mean elevation 122 m to 929 m, 1054–1326 land cells each), with the
+estimator refit each time:
+
+| region | mean elev | % of oracle | offset corr |
+|---|---|---|---|
+| austin | 250 m | 88% | 0.597 |
+| plains | 630 m | 77% | 0.557 |
+| easthumid | 122 m | 77% | 0.489 |
+| coastal | 160 m | 72% | 0.532 |
+| westdry | 929 m | **64%** | 0.619 |
+| **mean** | | **76% (sd 9.0)** | 0.559 |
+
+Austin is the best case, not a typical one — quote 76% ± 9. The effect itself
+is general: a single domain mean recovers only **28%** over the same five
+regions, so the spatial-field decomposition is worth ~2.7x a scalar estimate
+everywhere, and the ordering is unanimous across all five.
+
+`westdry` is the informative one. It is the roughest region (929 m mean
+elevation, 4x the others) and recovers least (64%) *despite the highest offset
+correlation* (0.619) — so the limit there is not whether the bias is shared,
+but that the bias field has more structure over complex terrain than a 6x6
+block grid resolves. A terrain-aware or locally-refined basis should help
+specifically there.
+
+Caveat: the checkpoints hold out Austin, so the other four regions are
+in-sample for the model. This validates the ESTIMATOR — the bias comes from a
+POWER<->ERA5-Land disagreement, not from training — hence the ratio columns;
+absolute gains are optimistic in-sample. Model-level leave-one-region-out needs
+retraining per region. A k-sweep puts
 the knee at k=6: monotonic improvement to k=6, a plateau through k=12 (−35.2%
 on `of0_s1337`), then degradation at k=16 (−32.7%) as the blocks start fitting
 train-split noise. Adding lag-1, season and coarse-field state **on top** of the
@@ -884,6 +915,55 @@ python power_vis.py <file.nc> --list        # POWER daily T2M: overview, values,
 python xarr.py <era5_dir> --save            # ERA5-Land monthly compare + stitch
 python scripts/generate_dataset_gallery.py  # regenerate docs/dataset_gallery/
 ```
+
+### Regenerating the geo-referenced figures
+
+Every map sheet below is drawn on the same geography — true lat/lon graticules
+over EPSG:5070, the held-out box outlined in orange, the whole domain shown,
+metrics quoted over the 1295 land cells inside the box. The shared furniture is
+`evaluation/mapping.py`; the shared field loading and residual decomposition is
+`evaluation/fields.py`, so no two figures can disagree about what the residual
+is.
+
+```bash
+# §5.4 error budget, as maps: task residual -> mu(t) + s(x) + remainder,
+#      the model's own budget alongside, and what the model removed per cell
+python scripts/make_budget_panels.py       --archs v2_landcov_s1337 of0_s1337
+
+# §5.5/§5.8 fine-scale detail, as maps: per-cell amplitude AND per-cell
+#      coherence, deep vs the 2.2k-parameter affine control
+python scripts/make_coherence_panels.py    --deep v2_landcov_s1337 --affine lin_s1337
+
+# §5.7 what the offset correction buys, as maps: per-cell RMSE and bias
+#      before/after, plus the five leave-one-region-out boxes
+python scripts/make_improvement_panels.py  --archs of0_s1337 v2_landcov_s1337
+
+# §5.7 the mechanism on a single day (scatter + year-mean ladder)
+python scripts/make_offset_panels.py       --archs of0_s1337
+```
+
+### The interactive bench
+
+`webapp/` is a Next.js app that puts §5.7 on a scrubber: step through the test
+year and watch a single estimated daily offset flatten the error map, switching
+between the global-mean estimator, the k=6 one and the oracle.
+
+```bash
+python scripts/export_offset_demo.py --target webapp   # writes webapp/public/data/
+cd webapp && npm install && npm run dev
+```
+
+The exporter runs the checkpoint over every day in the store and writes a 30 kB
+`manifest.json` (every number the page quotes, rendered on the server) plus a
+2.3 MB `fields.bin` of quantised fields. Nothing is computed in the browser
+except `error − offset`. `--target artifact` emits the same data as one
+self-contained `data.js` instead. See `webapp/README.md`.
+
+These read `configs/data_sc_super.yaml` directly rather than through
+`DOWNSCALE_CONFIG_data`, so they cannot silently draw the Colorado prototype.
+Model output over the whole store is cached in `.field_cache/`, keyed by
+checkpoint mtime — the first run of a checkpoint costs ~1826 forward passes,
+later runs are instant.
 
 ---
 

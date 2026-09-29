@@ -1,0 +1,27 @@
+# South-Central store with AORC as the TRUTH product.
+#
+# WHY. Every result so far is measured against ERA5-Land, a reanalysis produced
+# by lapse-rate downscaling coarse ERA5 with a land-surface model — so a network
+# given elevation can partially re-derive it. Measured consequences: after bias
+# correction our model sits level with ERA5-Land's OWN distance from station
+# thermometers, and AORC and ERA5-Land disagree with each other by rms 0.680 degC
+# over the held-out region, which is ~87% of total model error.
+#
+# That makes "the bottleneck is the target, not the model" a claim we can test
+# rather than infer: train the SAME architecture and predictors against an
+# observation-informed product, and score both against stations — a judge
+# neither product controls.
+#
+# Aggregation is a true block mean (data/regrid.py). AORC is ~1 km and the
+# target is 10 km, so one cell covers ~100 source pixels; the nearest-neighbour
+# path would take a single pixel and report a point sample as a cell mean.
+#
+# NOTE ON COVERAGE. AORC is a CONUS analysis: ~92% of this domain is finite, but
+# only 74% south of 29 N. The land mask therefore differs from the ERA5-Land
+# build, and the two runs must report their scored-cell counts side by side.
+extends: data_sc_super
+
+truth_source: "aorc"
+
+dataset:
+  out_zarr: "data_store_sc/aorc/dataset.zarr"

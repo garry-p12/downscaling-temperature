@@ -1,0 +1,27 @@
+{
+  "name": "offset-correction-bench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interactive bench for the daily-offset correction in the perfect-prognosis downscaling project",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "export:data": "cd .. && python scripts/export_offset_demo.py --target webapp",
+    "build:static": "NEXT_STATIC_EXPORT=1 next build",
+    "preview:static": "npx --yes serve out -l 4321"
+  },
+  "dependencies": {
+    "next": "^16.3.7",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.6",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "typescript": "^5.7.3"
+  }
+}

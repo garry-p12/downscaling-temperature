@@ -83,7 +83,30 @@ def _strip_encoding(ds):
     return ds
 
 
+def _configure_dask() -> None:
+    """Keep dask inside a login node's process limit.
+
+    The S3 pull has to run on a login node — compute nodes here have no
+    outbound network — and TACC login nodes cap user threads. Dask's default
+    threaded scheduler exceeds that cap and dies with
+    ``RuntimeError: can't start new thread`` partway through the write. The
+    synchronous scheduler uses none, which is slower but is the difference
+    between finishing and not.
+    """
+    import os
+
+    if os.environ.get("DOWNSCALE_DASK_SYNC", "0") != "1":
+        return
+    import dask
+    dask.config.set(scheduler="synchronous")
+    for v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+              "NUMEXPR_NUM_THREADS"):
+        os.environ.setdefault(v, "1")
+    print("[aorc] dask: synchronous scheduler (login-node thread limit)")
+
+
 def main(start: str, end: str, keep_hourly: bool) -> None:
+    _configure_dask()
     cfg = load_config("data")
     src = cfg["sources"]["aorc"]
     out_dir = Path(src["out_dir"])

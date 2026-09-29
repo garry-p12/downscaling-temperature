@@ -69,6 +69,35 @@ def predict_all(ckpt, ds, nz, names_stored, device="cpu"):
     return out
 
 
+# Leave-one-region-out boxes. Same footprint as the configured Austin box
+# (1.6 deg x 1.3 deg, expanded by the same 1.0 deg buffer) so the held-out area
+# is comparable, placed across distinct terrain and climate: high desert,
+# plains, humid east, coastal plain.
+#
+# IMPORTANT CAVEAT. The checkpoints were trained with AUSTIN held out, so for
+# every other region the model has seen those cells in training. This is
+# therefore a test of THE ESTIMATOR — can a region's daily bias be recovered
+# from the rest of the domain — not of model generalisation. The bias being
+# estimated comes from a POWER<->ERA5-Land product disagreement, which is not a
+# property of model training, so the question is still well posed; but absolute
+# RMSE gains are optimistic because the model's own error is in-sample there.
+# Read "% of oracle" and the offset correlation, which are ratios, in
+# preference to the raw gain. A true leave-one-region-out needs retraining per
+# region.
+REGIONS = {
+    "austin":   dict(name="austin",   lon_min=-98.6,  lon_max=-97.0,
+                     lat_min=29.7, lat_max=31.0, buffer_deg=1.0),
+    "westdry":  dict(name="westdry",  lon_min=-103.5, lon_max=-101.9,
+                     lat_min=30.5, lat_max=31.8, buffer_deg=1.0),
+    "plains":   dict(name="plains",   lon_min=-101.0, lon_max=-99.4,
+                     lat_min=33.0, lat_max=34.3, buffer_deg=1.0),
+    "easthumid": dict(name="easthumid", lon_min=-96.2, lon_max=-94.6,
+                      lat_min=31.5, lat_max=32.8, buffer_deg=1.0),
+    "coastal":  dict(name="coastal",  lon_min=-99.0,  lon_max=-97.4,
+                     lat_min=27.6, lat_max=28.9, buffer_deg=1.0),
+}
+
+
 def subregion_means(resid, mask, ny, nx, k=3):
     """Mean residual in each of k x k blocks of the TRAINING region.
 
@@ -132,12 +161,13 @@ def fit_ar(series, order, idx_fit):
     return np.linalg.lstsq(np.asarray(X), np.asarray(y), rcond=None)[0]
 
 
-def main(archs, zarr, device, out, dyn_zarr=None):
+def main(archs, zarr, device, out, dyn_zarr=None, region=None):
     cfg = load_config("data")
     ds = xr.open_zarr(zarr, consolidated=True)
     nz = Normalizer.load(str(Path(zarr).parent / "norm_stats.json"))
     stored = ds["channel_in"].values.tolist()
-    i0, i1, j0, j1 = holdout_bounds(ds, cfg["holdout"])
+    hcfg = REGIONS[region] if region else cfg["holdout"]
+    i0, i1, j0, j1 = holdout_bounds(ds, hcfg)
 
     split = ds["split"].values
     is_tr, is_te = split == "train", split == "test"
@@ -146,6 +176,7 @@ def main(archs, zarr, device, out, dyn_zarr=None):
     m_hold, m_train = hold & land, (~hold) & land        # disjoint by construction
     truth_a = np.nan_to_num(ds["target"].values[:, 0])
 
+    print(f"region '{hcfg.get('name', 'config')}' rows {i0}:{i1} cols {j0}:{j1}")
     print(f"train-region cells {int(m_train.sum())}, holdout cells "
           f"{int(m_hold.sum())}, days {len(split)} "
           f"({is_tr.sum()} train / {is_te.sum()} test)\n")
@@ -256,8 +287,11 @@ if __name__ == "__main__":
     ap.add_argument("--zarr", default="data_store_sc/super/dataset.zarr")
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--out", default="outputs/offset_correction.json")
+    ap.add_argument("--region", default=None, choices=sorted(REGIONS),
+                    help="hold out this region instead of the configured box "
+                         "(leave-one-region-out for the ESTIMATOR; see REGIONS)")
     ap.add_argument("--dyn-zarr", default=None,
                     help="store holding the dynamic POWER channels; adds their "
                          "holdout-region means as estimator features")
     a = ap.parse_args()
-    main(a.archs, a.zarr, a.device, a.out, a.dyn_zarr)
+    main(a.archs, a.zarr, a.device, a.out, a.dyn_zarr, a.region)

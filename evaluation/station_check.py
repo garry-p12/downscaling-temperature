@@ -151,6 +151,13 @@ def main(archs: list[str], year: int, station: str, device_name: str,
     nz = Normalizer.load(str(Path(zarr).parent / "norm_stats.json"))
     device = torch.device(device_name)
 
+    # Which product this store's target actually is. Needed both for the output
+    # filename (two arms run as separate invocations and the second used to
+    # overwrite the first) and for the truth row's label — reading the AORC
+    # store while printing "ERA5-Land" would mislabel the exact comparison this
+    # script exists to make.
+    truth = str(cfg.get("truth_source", "era5_land"))
+
     usaf, wban, lat, lon = STATIONS[station]
     obs = daily_mean(fetch_isd(usaf, wban, year,
                                Path("data_store_sc/raw/isd")))
@@ -173,9 +180,12 @@ def main(archs: list[str], year: int, station: str, device_name: str,
     print(f"[station] {int(np.isfinite(o).sum())}/{len(times)} days with "
           f">=20 valid hourly obs in {year}")
 
-    results = {"station": station, "year": year,
+    # Label the truth row by the product actually in this store. Reading the
+    # AORC store and calling the row "ERA5-Land" would mislabel the very
+    # comparison this script exists to make.
+    results = {"station": station, "year": year, "truth_source": truth,
                "grid_cell": [i, j], "methods": {}}
-    results["methods"]["ERA5-Land (our 'truth')"] = _score(era5, o)
+    results["methods"][f"{truth} (this run's training target)"] = _score(era5, o)
     results["methods"]["interpolated_POWER"] = _score(power, o)
 
     # The README 5.7 offset correction, scored against THERMOMETERS.
@@ -227,9 +237,11 @@ def main(archs: list[str], year: int, station: str, device_name: str,
                 results["methods"][f"{arch} + offset correction"] = \
                     _score(series + off, o)
 
-    # Per-station filename: a single fixed path meant the second
-    # station silently overwrote the first.
-    out = Path(f"outputs/station_check_{station}_{year}.json")
+    # Per-station AND per-truth-product filename. A per-station path was still
+    # not enough: two arms trained against different targets are run as
+    # separate invocations, so the second silently overwrote the first and the
+    # saved artifact held only the last arm's rows.
+    out = Path(f"outputs/station_check_{station}_{year}_{truth}.json")
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(results, indent=2))
 

@@ -72,3 +72,33 @@ def holdout_box(ax, box, label: str = "HELD-OUT REGION",
         ax.text((j0 + j1) / 2, i0 - 1.6, label, ha="center", va="bottom",
                 fontsize=fontsize, color=ORANGE, fontweight="bold", zorder=7,
                 path_effects=[pe.withStroke(linewidth=2.2, foreground=SURF)])
+
+
+def header(fig, title: str, body: str, chars: int = 200,
+           y_title: float = .995, fontsize: float = 9.3,
+           linespacing: float = 1.45):
+    """Figure title plus a hard-wrapped caption, returning the rect top.
+
+    matplotlib does not wrap fig.text, and savefig(bbox_inches='tight') grows
+    the canvas to contain the overhang — a long single-line caption silently
+    stretched a 19.5x9.8 in figure to a 49-inch-wide image with unreadable
+    maps. Wrapping here rather than at each call site keeps that from
+    reappearing every time a caption is edited.
+
+    The returned top is measured, not guessed: line height comes from the
+    point size and the FIGURE'S OWN height, so a caption that grows by two
+    lines pushes the axes down instead of landing on their titles. A constant
+    was wrong the moment two figures had different heights.
+    """
+    import textwrap
+
+    lines = []
+    for para in body.split("\n"):
+        lines += textwrap.wrap(para, chars) or [""]
+    fig.suptitle(title, x=.012, y=y_title, ha="left", va="top",
+                 fontsize=16.5, fontweight="semibold")
+    y_body = y_title - (16.5 * 1.6) / (fig.get_figheight() * 72)
+    fig.text(.012, y_body, "\n".join(lines), ha="left", va="top",
+             fontsize=fontsize, color=INK2, linespacing=linespacing)
+    line_h = (fontsize * linespacing) / (fig.get_figheight() * 72)
+    return max(.50, y_body - line_h * len(lines) - .014)
