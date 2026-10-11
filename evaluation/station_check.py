@@ -27,6 +27,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import gzip
 import io
 import json
@@ -37,6 +38,14 @@ import numpy as np
 import pandas as pd
 import torch
 import xarray as xr
+
+# TACC login nodes cap user threads; zarr and dask each open their own pool
+# and together trip it. Same guard as evaluation/fields.py.
+if os.environ.get("DOWNSCALE_MAX_WORKERS"):
+    import dask
+    import zarr as _zarr
+    _zarr.config.set({"threading.max_workers": int(os.environ["DOWNSCALE_MAX_WORKERS"])})
+    dask.config.set(scheduler="synchronous")
 
 from common import Normalizer, load_config
 from data.build_dataset import NO_NORMALIZE
@@ -117,20 +126,29 @@ def model_series(arch: str, test: xr.Dataset, nz: Normalizer, i, j,
     # norm_stats.json.
     stored = test["channel_in"].values.tolist()
     names = list(mcfg.get("use_channels") or stored)
-    inp = test["input"].values[:, [stored.index(n) for n in names]]
-    shape = ((inp.shape[0], inp.shape[2], inp.shape[3]) if full_field
-             else (inp.shape[0],))
+    idx = [stored.index(n) for n in names]
+    nt, ny, nx = test.sizes["time"], test.sizes["y"], test.sizes["x"]
+    shape = (nt, ny, nx) if full_field else (nt,)
     out = np.empty(shape, "float32")
-    for k in range(inp.shape[0]):
-        x = inp[k].copy()
-        for c, nm in enumerate(names):
-            if nm not in NO_NORMALIZE:
-                x[c] = nz.transform(f"in::{nm}", x[c])
-        np.nan_to_num(x, copy=False)
-        with torch.no_grad():        # 1826 full fields otherwise build a graph
-            p = model(torch.from_numpy(x).unsqueeze(0).to(device), {"temp"})
-        out[k] = (p["temp"][0, 0].cpu().numpy() if full_field
-                  else p["temp"][0, 0, i, j].cpu().numpy())
+
+    # Stream over time. Materialising the whole selected stack is 2.15 GB on a
+    # 34-channel store over 1826 days, and these checkpoints use every channel,
+    # so selecting the ones they need subsets nothing. Reading a block at a
+    # time keeps the footprint at a few tens of MB and changes no result.
+    BLOCK = 128
+    for k0 in range(0, nt, BLOCK):
+        k1 = min(nt, k0 + BLOCK)
+        blk = test["input"].isel(time=slice(k0, k1), channel_in=idx).values
+        for b in range(k1 - k0):
+            x = blk[b].copy()
+            for c, nm in enumerate(names):
+                if nm not in NO_NORMALIZE:
+                    x[c] = nz.transform(f"in::{nm}", x[c])
+            np.nan_to_num(x, copy=False)
+            with torch.no_grad():    # 1826 full fields otherwise build a graph
+                p = model(torch.from_numpy(x).unsqueeze(0).to(device), {"temp"})
+            out[k0 + b] = (p["temp"][0, 0].cpu().numpy() if full_field
+                           else p["temp"][0, 0, i, j].cpu().numpy())
     return out
 
 
@@ -202,7 +220,12 @@ def main(archs: list[str], year: int, station: str, device_name: str,
                                                   subregion_means)
         from training.dataset import holdout_bounds
         i0, i1, j0, j1 = holdout_bounds(full, cfg["holdout"])
-        land_f = full["input"].values[0, names.index("land_mask")] > 0.5
+        # .isel(...).values, NOT .values[0, i]: the latter materialises the
+        # whole (T, C, 93, 100) stack — 2.15 GB on a 34-channel store — just to
+        # read one 93x100 slice, and dies with an ArrayMemoryError. Same bug
+        # that was fixed in evaluation/fields.py.
+        land_f = full["input"].isel(
+            time=0, channel_in=names.index("land_mask")).values > 0.5
         hold_f = np.zeros_like(land_f); hold_f[i0:i1, j0:j1] = True
         m_tr, m_ho = (~hold_f) & land_f, hold_f & land_f
         split_all = full["split"].values

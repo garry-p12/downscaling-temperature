@@ -1,0 +1,20 @@
+# Points the evaluation tooling at the ix_era store.
+#
+# station_check.py and friends resolve the store through
+# load_config("data")["dataset"]["out_zarr"], so scoring an arm trained on this
+# store requires a config that names it. Channels, domain, grid, split and
+# holdout all come from data_sc_dyn; only the store path differs.
+#
+# Usage:
+#   DOWNSCALE_CONFIG_data=configs/data_sc_ixera.yaml \
+#       python -m evaluation.station_check --archs ixera_s1337 --offset-correct
+extends: data_sc_dyn
+
+dataset:
+  out_zarr: "data_store_sc/ix_era/dataset.zarr"
+
+# Names the product this store's target came from. station_check.py puts it in
+# the output filename and in the JSON, so leaving it at the default would have
+# written this arm's AORC-trained scores into a file labelled era5_land and
+# silently overwritten the other target's results.
+truth_source: era5_land
