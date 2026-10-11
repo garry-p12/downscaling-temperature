@@ -77,18 +77,79 @@ def radial_spectrum(pred: np.ndarray, truth: np.ndarray,
     return out
 
 
-def effective_resolution(rows: list[dict]) -> float | None:
-    """Coarsest wavelength at which amplitude ratio is still above the floor.
+def _cross(rows, key, level, falling=True):
+    """Wavelength where `key` crosses `level`, interpolated in log-wavelength.
 
-    Scanned from coarse to fine, stopping at the FIRST crossing. Scanning for
-    the last one would be wrong: the amplitude ratio rises again near the
-    Nyquist corner, but with coherence ~0 that is uncorrelated noise, not
-    recovered signal — the paper calls this the noise-based regime.
+    Returns NaN if it never crosses within the measured bands.
     """
+    r = sorted(rows, key=lambda x: -x["wavelength_km"])
+    for i in range(1, len(r)):
+        a, b = r[i - 1][key], r[i][key]
+        hit = (b < level <= a) if falling else (b > level >= a)
+        if hit and a != b:
+            w0, w1 = np.log(r[i - 1]["wavelength_km"]), np.log(r[i]["wavelength_km"])
+            f = (a - level) / (a - b)
+            return float(np.exp(w0 + f * (w1 - w0)))
+    return float("nan")
+
+
+def effective_resolution(rows: list[dict], interpolate: bool = True) -> float | None:
+    """Coarsest wavelength at which the amplitude ratio is still above the floor.
+
+    Scanned coarse to fine, stopping at the FIRST crossing. Scanning for the
+    last one would be wrong: the amplitude ratio rises again near the Nyquist
+    corner, but with coherence ~0 that is uncorrelated noise, not recovered
+    signal — the paper calls this the noise-based regime.
+
+    INTERPOLATE, DO NOT SNAP TO A BAND CENTRE. The radial bands are linear in
+    wavenumber, so above 60 km on a 37x35 crop there are only four of them —
+    495, 165, 99 and 71 km. Returning the centre of the first band below the
+    floor gave an identical 165 km for four arms whose curves are plainly
+    different, and it understates the true crossing by roughly 2.5x because a
+    curve that is 0.88 at 495 km and 0.78 at 165 km crosses 0.866 near 405.
+    The metric could neither distinguish the arms nor state the right number.
+    `interpolate=False` restores the old behaviour for reproducing figures that
+    were published with it.
+    """
+    if interpolate:
+        v = _cross(rows, "amplitude_ratio", AMP_FLOOR)
+        return None if np.isnan(v) else v
     for r in sorted(rows, key=lambda r: -r["wavelength_km"]):
         if r["amplitude_ratio"] < AMP_FLOOR:
             return r["wavelength_km"]
     return None
+
+
+def coherence_resolution(rows: list[dict], level: float = 0.5) -> float | None:
+    """Wavelength where coherence with truth falls below `level`.
+
+    Better behaved than the amplitude crossing and usually the more honest
+    summary: the amplitude ratio is non-monotone (it can rise again at fine
+    scales where the model is injecting uncorrelated texture), so a
+    first-crossing statistic on it is fragile. Coherence falls monotonically in
+    practice, and "the scale below which the model stops placing structure
+    correctly" is the question a reader actually has.
+
+    None means it never dropped below `level` within the measured bands — a
+    lower bound on skill, not a failure.
+    """
+    v = _cross(rows, "coherence", level)
+    return None if np.isnan(v) else v
+
+
+def summarise_spectrum(rows: list[dict]) -> dict:
+    """Both crossings plus band-mean skill, for reporting in place of one number."""
+    fine = [r for r in rows if r["wavelength_km"] <= 60]
+    return {
+        "eff_res_km": effective_resolution(rows),
+        "eff_res_km_banded": effective_resolution(rows, interpolate=False),
+        "coh_res_km": coherence_resolution(rows),
+        "amp_below_60km": float(np.mean([r["amplitude_ratio"] for r in fine])) if fine else float("nan"),
+        "coh_below_60km": float(np.mean([r["coherence"] for r in fine])) if fine else float("nan"),
+        "curve": [{"wavelength_km": r["wavelength_km"],
+                   "amplitude_ratio": r["amplitude_ratio"],
+                   "coherence": r["coherence"]} for r in rows],
+    }
 
 
 def predict_holdout(ckpt: Path, ds, nz, idx_map, box, device="cpu"):
