@@ -119,7 +119,10 @@ def test_on_a_smoothed_field_the_resolution_is_coarser_than_the_grid():
     truth = np.stack([gaussian_filter(t, 1.0) for t in truth])      # give it structure
     blur = np.stack([gaussian_filter(t, 2.5) for t in truth])
 
-    exact = effective_resolution(radial_spectrum(truth, truth))
-    smooth = effective_resolution(radial_spectrum(blur, truth))
+    # dx_km is explicit because radial_spectrum no longer defaults it: the
+    # old 10.0 default was "whatever grid the project was on" and reported
+    # every wavelength 2x too coarse the moment that changed.
+    exact = effective_resolution(radial_spectrum(truth, truth, dx_km=10.0))
+    smooth = effective_resolution(radial_spectrum(blur, truth, dx_km=10.0))
     assert exact is None                       # identical fields never cross
     assert smooth is not None and smooth > 0   # the blurred one does

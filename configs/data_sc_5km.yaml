@@ -1,0 +1,45 @@
+# South-Central store at 5 km, AORC truth. A SEPARATE RESULT SET, not a
+# replacement for the 10 km work.
+#
+# WHY 5 KM, AND WHY AORC ONLY.
+# At 10 km the amplitude/coherence curves never turn over: the AORC-trained
+# model still agrees with AORC truth at better than 0.5 coherence at every
+# wavelength the 10 km grid can measure. The grid stops before the skill does,
+# so we do not know where the skill ends. 5 km is how we find out.
+#
+# ERA5-Land cannot come along. It is 0.1 deg — ~11 km lat, ~9.6 km lon at 30 N
+# — so it is COARSER than a 5 km target. configs/data_base.yaml says its native
+# resolution "MATCHES the 10 km target, so truth is reprojected, not
+# aggregated"; at 5 km that reprojection becomes interpolation and we would be
+# training a model to reproduce an interpolant. That is the exact failure this
+# project spent months documenting, so the ERA5-Land arm retires here. AORC is
+# ~1 km, so a 5 km cell is still a real average of ~25 source pixels.
+#
+# RMSE FROM THIS STORE IS NOT COMPARABLE TO THE 10 KM NUMBERS. Different cell
+# area, different representativeness error, different truth aggregation. Report
+# the two side by side, never in one column.
+#
+# Usage:
+#   DOWNSCALE_CONFIG_data=configs/data_sc_5km.yaml python -m data.build_dataset
+extends: data_sc_super
+
+truth_source: "aorc"
+
+grid:
+  # The one value that moves. build_target_grid snaps the projected bbox
+  # outward, giving 185 x 200 = 37,000 cells — 3.98x the 10 km grid, and note
+  # the ODD y dimension. Downscaling factor from POWER becomes ~50 km -> 5 km,
+  # i.e. 10x rather than 5x.
+  target_res_m: 5000
+
+dataset:
+  out_zarr: "data_store_sc/km5/dataset.zarr"
+  # One day per chunk, NOT the inherited 32.
+  #
+  # The store is read with shuffle=True, so every random training sample
+  # decompresses a whole chunk. At 10 km a 32-day chunk of this channel set is
+  # 25 MB; at 5 km it is ~99 MB, for one 48x48 patch. The stores that were
+  # already built per-day (aorc, aorc_ctx, ix_*) are precisely the ones whose
+  # training runs are described in the slurm headers as "~10 min each".
+  chunks:
+    time: 1

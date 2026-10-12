@@ -44,8 +44,19 @@ from evaluation.spectral import radial_spectrum                  # noqa: E402
 
 FIGDIR = REPO / "image_outputs" / "slides"
 CUT_KM = 60.0
-SIGMA = float(np.sqrt(np.log(2)) / (np.pi * np.sqrt(2)) * CUT_KM / 10.0)
-RIM = 4
+
+
+def rim_cells(sigma: float) -> int:
+    """Cells to drop at the domain edge before quoting any high-pass statistic.
+
+    `highpass` filters with mode="nearest", which reflects the edge value
+    outward and leaves a contaminated band a few sigma wide. The band is a
+    number of CELLS proportional to sigma, so a literal 4 — correct at 10 km,
+    where sigma is 1.12 cells — stops covering it the moment the grid gets
+    finer and a frame of fake fine-scale amplitude leaks into every mean.
+    """
+    import math
+    return max(2, int(math.ceil(3.0 * sigma)))
 
 
 def load_pred(store, name, ckpt):
@@ -67,6 +78,10 @@ def main(era_arm, aorc_arm, ckpt, day):
 
     st_e = Store("data_store_sc/ix_era/dataset.zarr")
     st_a = Store("data_store_sc/ix_aorc/dataset.zarr")
+    SIGMA = st_a.sigma_cells(CUT_KM)
+    RIM = rim_cells(SIGMA)
+    print(f"[panels] {st_a.dx_km:.1f} km cells -> sigma {SIGMA:.2f} cells, "
+          f"rim {RIM}")
     te, land, box, hold = st_e.i_test, st_e.land, st_e.box, st_e.m_hold
     ny, nx = st_e.shape
     inner = np.zeros_like(land); inner[RIM:-RIM, RIM:-RIM] = True
@@ -189,7 +204,7 @@ def main(era_arm, aorc_arm, ckpt, day):
     for lab, f, c in [("ERA5-Land truth", truth_e, INK3),
                       ("ERA5-Land-trained", p_era, "#2a78d6"),
                       ("AORC-trained", p_aor, ORANGE)]:
-        rows = radial_spectrum(crop(f), A)
+        rows = radial_spectrum(crop(f), A, dx_km=st_a.dx_km)
         w = [r["wavelength_km"] for r in rows]
         a4.plot(w, [r["coherence"] for r in rows], "-o", ms=3.5, lw=1.6,
                 color=c, label=lab)

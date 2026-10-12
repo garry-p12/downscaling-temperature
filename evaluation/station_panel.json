@@ -1,452 +1,468 @@
-[
- {
-  "key": "720110_Llano_Municipal_Airport",
-  "usaf": "720110",
-  "wban": "53983",
-  "lat": 30.784,
-  "lon": -98.662,
-  "row": 49,
-  "col": 54,
-  "elev_m": 335.9
+{
+ "grid": {
+  "res_m": 10000.0,
+  "shape": [
+   93,
+   100
+  ],
+  "crs": "EPSG:5070",
+  "box": [
+   36,
+   73,
+   45,
+   80
+  ]
  },
- {
-  "key": "720303_Hearne_Municipal_Airport",
-  "usaf": "720303",
-  "wban": "53973",
-  "lat": 30.872,
-  "lon": -96.622,
-  "row": 49,
-  "col": 74,
-  "elev_m": 86.9
- },
- {
-  "key": "720323_Gillespie_Co",
-  "usaf": "720323",
-  "wban": "93947",
-  "lat": 30.243,
-  "lon": -98.91,
-  "row": 55,
-  "col": 52,
-  "elev_m": 516.6
- },
- {
-  "key": "720395_Pleasanton_Municipal_Airport",
-  "usaf": "720395",
-  "wban": "00130",
-  "lat": 28.95,
-  "lon": -98.517,
-  "row": 70,
-  "col": 55,
-  "elev_m": 131.1
- },
- {
-  "key": "720542_Lago_Vista_Rusty_Allen_Airport",
-  "usaf": "720542",
-  "wban": "00166",
-  "lat": 30.5,
-  "lon": -97.967,
-  "row": 53,
-  "col": 61,
-  "elev_m": 375.2
- },
- {
-  "key": "720639_Horseshoe_Bay_Resort_Airport",
-  "usaf": "720639",
-  "wban": "00225",
-  "lat": 30.533,
-  "lon": -98.367,
-  "row": 52,
-  "col": 57,
-  "elev_m": 333.2
- },
- {
-  "key": "720647_Lampasas_Airport",
-  "usaf": "720647",
-  "wban": "00229",
-  "lat": 31.106,
-  "lon": -98.196,
-  "row": 46,
-  "col": 59,
-  "elev_m": 370.0
- },
- {
-  "key": "720648_Austin_Executive_Airport",
-  "usaf": "720648",
-  "wban": "00230",
-  "lat": 30.395,
-  "lon": -97.567,
-  "row": 54,
-  "col": 64,
-  "elev_m": 188.1
- },
- {
-  "key": "720771_Coleman_Municipal_Airport",
-  "usaf": "720771",
-  "wban": "00276",
-  "lat": 31.841,
-  "lon": -99.404,
-  "row": 38,
-  "col": 47,
-  "elev_m": 517.3
- },
- {
-  "key": "720779_Mexia_Limestone_County_Airport",
-  "usaf": "720779",
-  "wban": "00461",
-  "lat": 31.641,
-  "lon": -96.514,
-  "row": 40,
-  "col": 75,
-  "elev_m": 166.1
- },
- {
-  "key": "721034_Cameron_Municipal_Airport",
-  "usaf": "721034",
-  "wban": "00351",
-  "lat": 30.879,
-  "lon": -96.971,
-  "row": 49,
-  "col": 70,
-  "elev_m": 123.1
- },
- {
-  "key": "722113_GiddingsLee_County_Airport",
-  "usaf": "722113",
-  "wban": "53979",
-  "lat": 30.169,
-  "lon": -96.98,
-  "row": 57,
-  "col": 70,
-  "elev_m": 147.8
- },
- {
-  "key": "722231_Hamilton_Municipal_Airport",
-  "usaf": "722231",
-  "wban": "00357",
-  "lat": 31.666,
-  "lon": -98.149,
-  "row": 40,
-  "col": 59,
-  "elev_m": 396.2
- },
- {
-  "key": "722323_Gatesville_Municipal_Airport",
-  "usaf": "722323",
-  "wban": "00362",
-  "lat": 31.417,
-  "lon": -97.8,
-  "row": 43,
-  "col": 62,
-  "elev_m": 276.2
- },
- {
-  "key": "722351_Wharton_Regional_Airport",
-  "usaf": "722351",
-  "wban": "12953",
-  "lat": 29.266,
-  "lon": -96.008,
-  "row": 67,
-  "col": 79,
-  "elev_m": 30.5
- },
- {
-  "key": "722416_New_Braunfels_Municipal_Ap",
-  "usaf": "722416",
-  "wban": "12971",
-  "lat": 29.709,
-  "lon": -98.046,
-  "row": 62,
-  "col": 60,
-  "elev_m": 197.6
- },
- {
-  "key": "722469_Campbell_FldCorsicana_Mu",
-  "usaf": "722469",
-  "wban": "53912",
-  "lat": 32.032,
-  "lon": -96.399,
-  "row": 36,
-  "col": 76,
-  "elev_m": 135.0
- },
- {
-  "key": "722523_Stinson_Minicipal_Airport",
-  "usaf": "722523",
-  "wban": "12970",
-  "lat": 29.339,
-  "lon": -98.472,
-  "row": 66,
-  "col": 55,
-  "elev_m": 173.1
- },
- {
-  "key": "722530_San_Antonio_International_Airport",
-  "usaf": "722530",
-  "wban": "12921",
-  "lat": 29.544,
-  "lon": -98.484,
-  "row": 63,
-  "col": 55,
-  "elev_m": 243.6
- },
- {
-  "key": "722533_Hondo_Municipal_Airport",
-  "usaf": "722533",
-  "wban": "12962",
-  "lat": 29.36,
-  "lon": -99.174,
-  "row": 65,
-  "col": 49,
-  "elev_m": 281.0
- },
- {
-  "key": "722535_Lackland_Air_Force_Base_Kelly_Field_Anne",
-  "usaf": "722535",
-  "wban": "12909",
-  "lat": 29.383,
-  "lon": -98.583,
-  "row": 65,
-  "col": 54,
-  "elev_m": 210.3
- },
- {
-  "key": "722536_Randolph_Afb_Airport",
-  "usaf": "722536",
-  "wban": "12911",
-  "lat": 29.533,
-  "lon": -98.262,
-  "row": 63,
-  "col": 58,
-  "elev_m": 221.9
- },
- {
-  "key": "722537_Krvl_MuniLuis_Shrer_Fd_Ap",
-  "usaf": "722537",
-  "wban": "12961",
-  "lat": 29.983,
-  "lon": -99.083,
-  "row": 58,
-  "col": 50,
-  "elev_m": 492.9
- },
- {
-  "key": "722539_San_Marcos_Municipal_Arpt",
-  "usaf": "722539",
-  "wban": "12979",
-  "lat": 29.891,
-  "lon": -97.864,
-  "row": 60,
-  "col": 62,
-  "elev_m": 182.0
- },
- {
-  "key": "722540_AustinBergstrom_Intl_Airport",
-  "usaf": "722540",
-  "wban": "13904",
-  "lat": 30.183,
-  "lon": -97.68,
-  "row": 56,
-  "col": 63,
-  "elev_m": 146.3
- },
- {
-  "key": "722542_Burnet_Municipal_Cradock_Field_Airport",
-  "usaf": "722542",
-  "wban": "03999",
-  "lat": 30.741,
-  "lon": -98.235,
-  "row": 50,
-  "col": 58,
-  "elev_m": 386.1
- },
- {
-  "key": "722544_AustinCamp_Mabry",
-  "usaf": "722544",
-  "wban": "13958",
-  "lat": 30.321,
-  "lon": -97.76,
-  "row": 55,
-  "col": 63,
-  "elev_m": 204.2
- },
- {
-  "key": "722547_Georgetown_Municipal_Arpt",
-  "usaf": "722547",
-  "wban": "53942",
-  "lat": 30.679,
-  "lon": -97.679,
-  "row": 51,
-  "col": 63,
-  "elev_m": 239.9
- },
- {
-  "key": "722550_Victoria_Regional_Airport",
-  "usaf": "722550",
-  "wban": "12912",
-  "lat": 28.862,
-  "lon": -96.93,
-  "row": 71,
-  "col": 70,
-  "elev_m": 33.7
- },
- {
-  "key": "722560_Waco_Regional_Airport",
-  "usaf": "722560",
-  "wban": "13959",
-  "lat": 31.618,
-  "lon": -97.228,
-  "row": 41,
-  "col": 68,
-  "elev_m": 151.9
- },
- {
-  "key": "722561_Tstc_Waco",
-  "usaf": "722561",
-  "wban": "99999",
-  "lat": 31.638,
-  "lon": -97.074,
-  "row": 40,
-  "col": 69,
-  "elev_m": 143.3
- },
- {
-  "key": "722563_Mc_Gregor_Executive_Arpt",
-  "usaf": "722563",
-  "wban": "53952",
-  "lat": 31.485,
-  "lon": -97.316,
-  "row": 42,
-  "col": 67,
-  "elev_m": 180.4
- },
- {
-  "key": "722570_Hood_Aaf_Airport",
-  "usaf": "722570",
-  "wban": "03933",
-  "lat": 31.133,
-  "lon": -97.717,
-  "row": 46,
-  "col": 63,
-  "elev_m": 281.6
- },
- {
-  "key": "722575_Killeen_Municipal_Airport",
-  "usaf": "722575",
-  "wban": "03972",
-  "lat": 31.083,
-  "lon": -97.683,
-  "row": 46,
-  "col": 63,
-  "elev_m": 256.3
- },
- {
-  "key": "722576_Robert_Gray_Aff_Airport",
-  "usaf": "722576",
-  "wban": "03902",
-  "lat": 31.067,
-  "lon": -97.833,
-  "row": 47,
-  "col": 62,
-  "elev_m": 309.4
- },
- {
-  "key": "722577_DraughonMiller_Cntrl_Tx_Rgnl_Arpt",
-  "usaf": "722577",
-  "wban": "93984",
-  "lat": 31.15,
-  "lon": -97.417,
-  "row": 46,
-  "col": 66,
-  "elev_m": 207.9
- },
- {
-  "key": "722666_Brownwood_Regional_Airport",
-  "usaf": "722666",
-  "wban": "93943",
-  "lat": 31.8,
-  "lon": -98.95,
-  "row": 38,
-  "col": 52,
-  "elev_m": 419.7
- },
- {
-  "key": "723628_Curtis_Field_Airport",
-  "usaf": "723628",
-  "wban": "93942",
-  "lat": 31.178,
-  "lon": -99.324,
-  "row": 45,
-  "col": 48,
-  "elev_m": 556.9
- },
- {
-  "key": "723761_Caldwell_Municipal_Airport",
-  "usaf": "723761",
-  "wban": "23901",
-  "lat": 30.516,
-  "lon": -96.704,
-  "row": 53,
-  "col": 73,
-  "elev_m": 119.2
- },
- {
-  "key": "747355_Comanche_CountyCity_Airport",
-  "usaf": "747355",
-  "wban": "53997",
-  "lat": 31.917,
-  "lon": -98.6,
-  "row": 37,
-  "col": 55,
-  "elev_m": 423.1
- },
- {
-  "key": "747460_Easterwood_Field_Airport",
-  "usaf": "747460",
-  "wban": "03904",
-  "lat": 30.591,
-  "lon": -96.363,
-  "row": 52,
-  "col": 76,
-  "elev_m": 96.0
- },
- {
-  "key": "999999_Austin_33_Nw",
-  "usaf": "999999",
-  "wban": "23907",
-  "lat": 30.622,
-  "lon": -98.085,
-  "row": 51,
-  "col": 60,
-  "elev_m": 414.8
- },
- {
-  "key": "999999_Roger_M_Dreyer_Memorial_Airport",
-  "usaf": "999999",
-  "wban": "00477",
-  "lat": 29.529,
-  "lon": -97.464,
-  "row": 64,
-  "col": 65,
-  "elev_m": 108.2
- },
- {
-  "key": "A00002_Brenham_Municipal_Airport",
-  "usaf": "A00002",
-  "wban": "53928",
-  "lat": 30.219,
-  "lon": -96.374,
-  "row": 56,
-  "col": 76,
-  "elev_m": 93.9
- },
- {
-  "key": "A00008_Fayette_Rgnl_Air_Cntr_Arp",
-  "usaf": "A00008",
-  "wban": "12978",
-  "lat": 29.908,
-  "lon": -96.95,
-  "row": 60,
-  "col": 70,
-  "elev_m": 98.8
- }
-]
+ "stations": [
+  {
+   "key": "720110_LLANO_MUNICIPAL_AIRPORT",
+   "usaf": "720110",
+   "wban": "53983",
+   "lat": 30.784,
+   "lon": -98.662,
+   "row": 49,
+   "col": 54,
+   "elev_m": 335.9
+  },
+  {
+   "key": "720303_HEARNE_MUNICIPAL_AIRPORT",
+   "usaf": "720303",
+   "wban": "53973",
+   "lat": 30.872,
+   "lon": -96.622,
+   "row": 49,
+   "col": 74,
+   "elev_m": 86.9
+  },
+  {
+   "key": "720323_GILLESPIE_CO",
+   "usaf": "720323",
+   "wban": "93947",
+   "lat": 30.243,
+   "lon": -98.91,
+   "row": 55,
+   "col": 52,
+   "elev_m": 516.6
+  },
+  {
+   "key": "720395_PLEASANTON_MUNICIPAL_AIRPORT",
+   "usaf": "720395",
+   "wban": "00130",
+   "lat": 28.95,
+   "lon": -98.517,
+   "row": 70,
+   "col": 55,
+   "elev_m": 131.1
+  },
+  {
+   "key": "720542_LAGO_VISTA_RUSTY_ALLEN_AIRPORT",
+   "usaf": "720542",
+   "wban": "00166",
+   "lat": 30.5,
+   "lon": -97.967,
+   "row": 53,
+   "col": 61,
+   "elev_m": 375.2
+  },
+  {
+   "key": "720639_HORSESHOE_BAY_RESORT_AIRPORT",
+   "usaf": "720639",
+   "wban": "00225",
+   "lat": 30.533,
+   "lon": -98.367,
+   "row": 52,
+   "col": 57,
+   "elev_m": 333.2
+  },
+  {
+   "key": "720647_LAMPASAS_AIRPORT",
+   "usaf": "720647",
+   "wban": "00229",
+   "lat": 31.106,
+   "lon": -98.196,
+   "row": 46,
+   "col": 59,
+   "elev_m": 370.0
+  },
+  {
+   "key": "720648_AUSTIN_EXECUTIVE_AIRPORT",
+   "usaf": "720648",
+   "wban": "00230",
+   "lat": 30.395,
+   "lon": -97.567,
+   "row": 54,
+   "col": 64,
+   "elev_m": 188.1
+  },
+  {
+   "key": "720771_COLEMAN_MUNICIPAL_AIRPORT",
+   "usaf": "720771",
+   "wban": "00276",
+   "lat": 31.841,
+   "lon": -99.404,
+   "row": 38,
+   "col": 47,
+   "elev_m": 517.3
+  },
+  {
+   "key": "720779_MEXIA_LIMESTONE_COUNTY_AIRPORT",
+   "usaf": "720779",
+   "wban": "00461",
+   "lat": 31.641,
+   "lon": -96.514,
+   "row": 40,
+   "col": 75,
+   "elev_m": 166.1
+  },
+  {
+   "key": "721034_CAMERON_MUNICIPAL_AIRPORT",
+   "usaf": "721034",
+   "wban": "00351",
+   "lat": 30.879,
+   "lon": -96.971,
+   "row": 49,
+   "col": 70,
+   "elev_m": 123.1
+  },
+  {
+   "key": "722113_GIDDINGS-LEE_COUNTY_AIRPORT",
+   "usaf": "722113",
+   "wban": "53979",
+   "lat": 30.169,
+   "lon": -96.98,
+   "row": 57,
+   "col": 70,
+   "elev_m": 147.8
+  },
+  {
+   "key": "722231_HAMILTON_MUNICIPAL_AIRPORT",
+   "usaf": "722231",
+   "wban": "00357",
+   "lat": 31.666,
+   "lon": -98.149,
+   "row": 40,
+   "col": 59,
+   "elev_m": 396.2
+  },
+  {
+   "key": "722323_GATESVILLE_MUNICIPAL_AIRPORT",
+   "usaf": "722323",
+   "wban": "00362",
+   "lat": 31.417,
+   "lon": -97.8,
+   "row": 43,
+   "col": 62,
+   "elev_m": 276.2
+  },
+  {
+   "key": "722351_WHARTON_REGIONAL_AIRPORT",
+   "usaf": "722351",
+   "wban": "12953",
+   "lat": 29.266,
+   "lon": -96.008,
+   "row": 67,
+   "col": 79,
+   "elev_m": 30.5
+  },
+  {
+   "key": "722416_NEW_BRAUNFELS_MUNICIPAL_AP",
+   "usaf": "722416",
+   "wban": "12971",
+   "lat": 29.709,
+   "lon": -98.046,
+   "row": 62,
+   "col": 60,
+   "elev_m": 197.6
+  },
+  {
+   "key": "722469_CAMPBELL_FLD-CORSICANA_MU",
+   "usaf": "722469",
+   "wban": "53912",
+   "lat": 32.032,
+   "lon": -96.399,
+   "row": 36,
+   "col": 76,
+   "elev_m": 135.0
+  },
+  {
+   "key": "722523_STINSON_MINICIPAL_AIRPORT",
+   "usaf": "722523",
+   "wban": "12970",
+   "lat": 29.339,
+   "lon": -98.472,
+   "row": 66,
+   "col": 55,
+   "elev_m": 173.1
+  },
+  {
+   "key": "722530_SAN_ANTONIO_INTERNATIONAL_AIRPORT",
+   "usaf": "722530",
+   "wban": "12921",
+   "lat": 29.544,
+   "lon": -98.484,
+   "row": 63,
+   "col": 55,
+   "elev_m": 243.6
+  },
+  {
+   "key": "722533_HONDO_MUNICIPAL_AIRPORT",
+   "usaf": "722533",
+   "wban": "12962",
+   "lat": 29.36,
+   "lon": -99.174,
+   "row": 65,
+   "col": 49,
+   "elev_m": 281.0
+  },
+  {
+   "key": "722535_LACKLAND_AIR_FORCE_BASE_(KELLY_FIELD_ANNEX)",
+   "usaf": "722535",
+   "wban": "12909",
+   "lat": 29.383,
+   "lon": -98.583,
+   "row": 65,
+   "col": 54,
+   "elev_m": 210.3
+  },
+  {
+   "key": "722536_RANDOLPH_AFB_AIRPORT",
+   "usaf": "722536",
+   "wban": "12911",
+   "lat": 29.533,
+   "lon": -98.262,
+   "row": 63,
+   "col": 58,
+   "elev_m": 221.9
+  },
+  {
+   "key": "722537_KRVL_MUNI/LUIS_SHRER_FD_AP",
+   "usaf": "722537",
+   "wban": "12961",
+   "lat": 29.983,
+   "lon": -99.083,
+   "row": 58,
+   "col": 50,
+   "elev_m": 492.9
+  },
+  {
+   "key": "722539_SAN_MARCOS_MUNICIPAL_ARPT",
+   "usaf": "722539",
+   "wban": "12979",
+   "lat": 29.891,
+   "lon": -97.864,
+   "row": 60,
+   "col": 62,
+   "elev_m": 182.0
+  },
+  {
+   "key": "722540_AUSTIN-BERGSTROM_INTL_AIRPORT",
+   "usaf": "722540",
+   "wban": "13904",
+   "lat": 30.183,
+   "lon": -97.68,
+   "row": 56,
+   "col": 63,
+   "elev_m": 146.3
+  },
+  {
+   "key": "722542_BURNET_MUNICIPAL_CRADOCK_FIELD_AIRPORT",
+   "usaf": "722542",
+   "wban": "03999",
+   "lat": 30.741,
+   "lon": -98.235,
+   "row": 50,
+   "col": 58,
+   "elev_m": 386.1
+  },
+  {
+   "key": "722544_AUSTIN-CAMP_MABRY",
+   "usaf": "722544",
+   "wban": "13958",
+   "lat": 30.321,
+   "lon": -97.76,
+   "row": 55,
+   "col": 63,
+   "elev_m": 204.2
+  },
+  {
+   "key": "722547_GEORGETOWN_MUNICIPAL_ARPT",
+   "usaf": "722547",
+   "wban": "53942",
+   "lat": 30.679,
+   "lon": -97.679,
+   "row": 51,
+   "col": 63,
+   "elev_m": 239.9
+  },
+  {
+   "key": "722550_VICTORIA_REGIONAL_AIRPORT",
+   "usaf": "722550",
+   "wban": "12912",
+   "lat": 28.862,
+   "lon": -96.93,
+   "row": 71,
+   "col": 70,
+   "elev_m": 33.7
+  },
+  {
+   "key": "722560_WACO_REGIONAL_AIRPORT",
+   "usaf": "722560",
+   "wban": "13959",
+   "lat": 31.618,
+   "lon": -97.228,
+   "row": 41,
+   "col": 68,
+   "elev_m": 151.9
+  },
+  {
+   "key": "722561_TSTC_WACO",
+   "usaf": "722561",
+   "wban": "99999",
+   "lat": 31.638,
+   "lon": -97.074,
+   "row": 40,
+   "col": 69,
+   "elev_m": 143.3
+  },
+  {
+   "key": "722563_MC_GREGOR_EXECUTIVE_ARPT",
+   "usaf": "722563",
+   "wban": "53952",
+   "lat": 31.485,
+   "lon": -97.316,
+   "row": 42,
+   "col": 67,
+   "elev_m": 180.4
+  },
+  {
+   "key": "722570_HOOD_AAF_AIRPORT",
+   "usaf": "722570",
+   "wban": "03933",
+   "lat": 31.133,
+   "lon": -97.717,
+   "row": 46,
+   "col": 63,
+   "elev_m": 281.6
+  },
+  {
+   "key": "722575_KILLEEN_MUNICIPAL_AIRPORT",
+   "usaf": "722575",
+   "wban": "03972",
+   "lat": 31.083,
+   "lon": -97.683,
+   "row": 46,
+   "col": 63,
+   "elev_m": 256.3
+  },
+  {
+   "key": "722576_ROBERT_GRAY_AFF_AIRPORT",
+   "usaf": "722576",
+   "wban": "03902",
+   "lat": 31.067,
+   "lon": -97.833,
+   "row": 47,
+   "col": 62,
+   "elev_m": 309.4
+  },
+  {
+   "key": "722577_DRAUGHON-MILLER_CNTRL_TX_RGNL_ARPT",
+   "usaf": "722577",
+   "wban": "93984",
+   "lat": 31.15,
+   "lon": -97.417,
+   "row": 46,
+   "col": 66,
+   "elev_m": 207.9
+  },
+  {
+   "key": "722666_BROWNWOOD_REGIONAL_AIRPORT",
+   "usaf": "722666",
+   "wban": "93943",
+   "lat": 31.8,
+   "lon": -98.95,
+   "row": 38,
+   "col": 52,
+   "elev_m": 419.7
+  },
+  {
+   "key": "723628_CURTIS_FIELD_AIRPORT",
+   "usaf": "723628",
+   "wban": "93942",
+   "lat": 31.178,
+   "lon": -99.324,
+   "row": 45,
+   "col": 48,
+   "elev_m": 556.9
+  },
+  {
+   "key": "723761_CALDWELL_MUNICIPAL_AIRPORT",
+   "usaf": "723761",
+   "wban": "23901",
+   "lat": 30.516,
+   "lon": -96.704,
+   "row": 53,
+   "col": 73,
+   "elev_m": 119.2
+  },
+  {
+   "key": "747355_COMANCHE_COUNTY-CITY_AIRPORT",
+   "usaf": "747355",
+   "wban": "53997",
+   "lat": 31.917,
+   "lon": -98.6,
+   "row": 37,
+   "col": 55,
+   "elev_m": 423.1
+  },
+  {
+   "key": "747460_EASTERWOOD_FIELD_AIRPORT",
+   "usaf": "747460",
+   "wban": "03904",
+   "lat": 30.591,
+   "lon": -96.363,
+   "row": 52,
+   "col": 76,
+   "elev_m": 96.0
+  },
+  {
+   "key": "999999_AUSTIN_33_NW",
+   "usaf": "999999",
+   "wban": "23907",
+   "lat": 30.622,
+   "lon": -98.085,
+   "row": 51,
+   "col": 60,
+   "elev_m": 414.8
+  },
+  {
+   "key": "999999_ROGER_M_DREYER_MEMORIAL_AIRPORT",
+   "usaf": "999999",
+   "wban": "00477",
+   "lat": 29.529,
+   "lon": -97.464,
+   "row": 64,
+   "col": 65,
+   "elev_m": 108.2
+  },
+  {
+   "key": "A00002_BRENHAM_MUNICIPAL_AIRPORT",
+   "usaf": "A00002",
+   "wban": "53928",
+   "lat": 30.219,
+   "lon": -96.374,
+   "row": 56,
+   "col": 76,
+   "elev_m": 93.9
+  },
+  {
+   "key": "A00008_FAYETTE_RGNL_AIR_CNTR_ARP",
+   "usaf": "A00008",
+   "wban": "12978",
+   "lat": 29.908,
+   "lon": -96.95,
+   "row": 60,
+   "col": 70,
+   "elev_m": 98.8
+  }
+ ]
+}

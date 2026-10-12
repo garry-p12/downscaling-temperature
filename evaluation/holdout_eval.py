@@ -88,10 +88,17 @@ def predict(arch: str, ds_full: xr.Dataset, nz: Normalizer, device) -> np.ndarra
     # whatever the store happens to hold.
     names = list(mcfg.get("use_channels") or stored)
     idx = [stored.index(n) for n in names]
-    inp = ds_full["input"].values[:, idx]
-    out = np.empty((inp.shape[0], inp.shape[2], inp.shape[3]), "float32")
-    for k in range(inp.shape[0]):
-        x = inp[k].copy()
+    # .isel(time=k) per step, NOT ds["input"].values[:, idx]. The latter
+    # materialises the ENTIRE (T, C, y, x) stack before the channel index is
+    # applied: 1.4 GB on a 21-channel 10 km store, 5.7 GB at 5 km, and 9 GB on
+    # a 34-channel one. The same mistake has been fixed twice already, in
+    # fields.py and station_check.py, each time after it died with an
+    # ArrayMemoryError well before producing a number.
+    n_t = ds_full.sizes["time"]
+    shape = (ds_full.sizes["y"], ds_full.sizes["x"])
+    out = np.empty((n_t, *shape), "float32")
+    for k in range(n_t):
+        x = ds_full["input"].isel(time=k).values[idx].copy()
         for c, nm in enumerate(names):
             if nm not in NO_NORMALIZE:
                 x[c] = nz.transform(f"in::{nm}", x[c])
@@ -118,9 +125,13 @@ def main(archs: list[str], n_boot: int, out_root: str, device_name: str) -> None
     doy = pd.DatetimeIndex(test["time"].values).dayofyear.values - 1
     clim_t = full["clim_tmp"].values[doy]
     clim_c = full["clim_coarse_tmp"].values[doy]
-    truth = test["target"].values[:, 0] + clim_t
-    interp = test["input"].values[:, names.index("coarse_tmp")] + clim_c
-    land = full["input"].values[0, names.index("land_mask")] > 0.5
+    truth = test["target"].isel(channel_out=0).values + clim_t
+    # Same reason as in predict(): select the channel lazily, then materialise
+    # one (T, y, x) field rather than the whole input stack.
+    interp = test["input"].isel(
+        channel_in=names.index("coarse_tmp")).values + clim_c
+    land = full["input"].isel(
+        time=0, channel_in=names.index("land_mask")).values > 0.5
 
     def crop(a):
         return a[:, i0:i1, j0:j1]

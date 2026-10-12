@@ -1,0 +1,34 @@
+# The same 5 km grid with PRISM as the truth, built only to JUDGE the AORC
+# store — never to train on.
+#
+# WHY. At 10 km, AORC settled the ERA5-Land question because it was an
+# independent product that disagreed with the target in a measurable way. At
+# 5 km we have no such second opinion unless we build one. PRISM is the only
+# free daily gridded product in that range.
+#
+# TWO LIMITS, BOTH LOAD-BEARING.
+#
+#   1. PRISM tmean is (tmin + tmax) / 2, not the mean of the diurnal cycle.
+#      POWER T2M and AORC daily means are the latter. So PRISM carries a known
+#      systematic offset and is usable for STRUCTURE and for RANKING, never for
+#      absolute bias.
+#
+#   2. PRISM is 4 km against a 5 km target — only ~1.6 source cells per target
+#      cell. It genuinely resolves ~10 km features and can referee errors at
+#      that scale and coarser. It CANNOT referee the 5 km detail itself; only
+#      the station thermometers can. Do not quote a PRISM number as evidence
+#      about 5 km skill.
+#
+# Note build_dataset routes PRISM through raster_to_target(..., "average")
+# rather than the conservative block-mean path, which is what keeps this from
+# producing a NaN lattice at a ratio this close to 1.
+#
+# Usage:
+#   python -m data.download_prism --start 2019-01-01 --end 2023-12-31
+#   DOWNSCALE_CONFIG_data=configs/data_sc_5km_prism.yaml python -m data.build_dataset
+extends: data_sc_5km
+
+truth_source: "prism"
+
+dataset:
+  out_zarr: "data_store_sc/km5_prism/dataset.zarr"

@@ -144,7 +144,7 @@ def fig_resolution(plt, arms, seeds):
                     continue
                 from evaluation.fields import predict_all
                 F = st.to_absolute(predict_all(st, name, "last"))
-            curves.append(radial_spectrum(crop(F), A))
+            curves.append(radial_spectrum(crop(F), A, dx_km=ref.dx_km))
             if prefix is None:
                 break
         if not curves:

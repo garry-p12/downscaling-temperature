@@ -133,7 +133,7 @@ def main(out_dir, ckpt, k, seeds, arms, device):
             p = crop(pred_abs); a = crop(aorc_abs)
             p = p - p.mean((1, 2))[:, None, None]
             a = a - a.mean((1, 2))[:, None, None]
-            rows = radial_spectrum(p, a)
+            rows = radial_spectrum(p, a, dx_km=st.dx_km)
             fine = [r for r in rows if r["wavelength_km"] <= 60]
 
             per_seed["own_rmse"].append(r_own)

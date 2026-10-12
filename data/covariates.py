@@ -45,6 +45,24 @@ NLCD_GROUPS = {
 }
 LANDCOVER_CHANNELS = tuple(NLCD_GROUPS)
 
+# TPI asks "is this cell low relative to its surroundings", and "surroundings"
+# is a DISTANCE, not a cell count. The original `size=5` was 50 km only because
+# the grid happened to be 10 km; on a 5 km grid the same literal would quietly
+# redefine the channel to a 25 km neighbourhood, keeping its name and its units
+# while measuring something else. Pin the kilometres and derive the cells.
+TPI_WINDOW_KM = 50.0
+
+
+def tpi_window(res_m: float, window_km: float = TPI_WINDOW_KM) -> int:
+    """Side of the TPI averaging window, in cells, for a given cell size.
+
+    Forced odd so the window stays centred on its cell; `n | 1` rounds up, so
+    the realised window is never narrower than requested. At 10 km this returns
+    5 — bit-for-bit the previous behaviour — and at 5 km it returns 11 (55 km),
+    the nearest centred window to 50 km that an odd kernel allows.
+    """
+    return max(3, int(round(window_km * 1000.0 / float(res_m))) | 1)
+
 
 def _aggregate(src: np.ndarray, src_transform, src_crs, tgrid: TargetGrid,
                resampling=None) -> np.ndarray:
@@ -83,8 +101,9 @@ def terrain_features(dem_path, tgrid: TargetGrid, wanted=TERRAIN_CHANNELS,
                    would treat 359 deg and 1 deg as opposite. Weighting by
                    slope keeps flat cells, where aspect is meaningless, near
                    zero instead of contributing random directions.
-    ``tpi``        topographic position index at 10 km: cell elevation minus
-                   the mean of its 5x5 neighbourhood. Negative = basin, which
+    ``tpi``        topographic position index: cell elevation minus the mean
+                   of the surrounding TPI_WINDOW_KM (50 km) neighbourhood,
+                   which is 5x5 cells on a 10 km grid. Negative = basin, which
                    is where cold air pools on calm nights.
     """
     wanted = [w for w in wanted if w in TERRAIN_CHANNELS]
@@ -149,7 +168,8 @@ def terrain_features(dem_path, tgrid: TargetGrid, wanted=TERRAIN_CHANNELS,
             dem_mean if dem_mean is not None
             else _aggregate(dem, transform, crs, tgrid))
         base = np.asarray(base, dtype="float32")
-        out["tpi"] = base - uniform_filter(np.nan_to_num(base), size=5,
+        out["tpi"] = base - uniform_filter(np.nan_to_num(base),
+                                           size=tpi_window(tgrid.res_m),
                                            mode="nearest")
     del dem
 

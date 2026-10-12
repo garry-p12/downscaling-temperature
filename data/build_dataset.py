@@ -142,12 +142,27 @@ def _truth_aorc(cfg, tgrid: TargetGrid) -> xr.Dataset:
     from data.regrid import field_to_target
 
     src = cfg["sources"]["aorc"]
-    stores = sorted(Path(src["out_dir"]).glob("aorc_*.zarr"))
+    # *_daily.zarr, not aorc_*.zarr. download_aorc --keep-hourly writes
+    # aorc_<domain>_<year>_hourly.zarr into this same directory, and the old
+    # glob swept those up too: open_mfdataset would then combine an hourly and
+    # a daily store covering the same days, and the resample below would
+    # silently average a mixture. A truth field quietly wrong for one month is
+    # exactly the kind of error nothing downstream detects.
+    stores = sorted(Path(src["out_dir"]).glob("aorc_*_daily.zarr"))
     if not stores:
-        raise FileNotFoundError(f"No AORC zarr in {src['out_dir']}")
+        raise FileNotFoundError(
+            f"No aorc_*_daily.zarr in {src['out_dir']} "
+            f"(hourly stores are deliberately not matched)")
     ds = xr.open_mfdataset([str(s) for s in stores], engine="zarr",
                            combine="by_coords")
     tvar = src["variables"][0]
+    # One step per day, or the glob let something unexpected in.
+    t = pd.DatetimeIndex(ds["time"].values)
+    if len(t) and t.to_series().groupby(t.normalize()).size().max() > 1:
+        raise ValueError(
+            f"AORC stores in {src['out_dir']} have more than one step on some "
+            f"day; a sub-daily store is mixed in. Stores read: "
+            f"{[s.name for s in stores]}")
     tmp = ds[tvar].resample(time="1D").mean()
     if float(tmp.max()) > 200:  # Kelvin
         tmp = tmp - 273.15
@@ -168,12 +183,19 @@ def _truth_prism(cfg, tgrid: TargetGrid) -> xr.Dataset:
 
     src = cfg["sources"]["prism"]
     var = src["variables"][0]
-    root = Path(src["out_dir"]) / var
+    res = src["resolution"]
+    # Downloads are kept one directory per resolution: 4 km and 800 m are
+    # different products and silently mixing a few days of one into the other
+    # would be invisible in the built store.
+    root = Path(src["out_dir"]) / res / var
+    legacy = Path(src["out_dir"]) / var          # pre-split layout
+    if not root.exists() and legacy.exists():
+        root = legacy
     day_dirs = sorted(d for d in root.glob("[0-9]" * 8) if d.is_dir())
     if not day_dirs:
         raise FileNotFoundError(
             f"No PRISM {var} day folders in {root}. Run: "
-            f"python -m data.download_prism --start ... --end ...")
+            f"python -m data.download_prism --start ... --end ... --res {res}")
 
     fields, times = [], []
     for d in day_dirs:
@@ -574,10 +596,15 @@ def build_synthetic(n: int, size: int, cfg, block: int = 5
     rng = np.random.RandomState(0)
     ny = nx = size
     assert size % block == 0, f"synthetic size must be divisible by {block}"
-    y = np.arange(ny, dtype="float64") * 10000.0
-    x = np.arange(nx, dtype="float64") * 10000.0
-    tgrid = TargetGrid(crs=cfg["grid"]["target_crs"],
-                       res_m=cfg["grid"]["target_res_m"], x=x, y=y)
+    # Spacing comes from res_m, not a literal. With a hardcoded 10 km the
+    # coordinates and the declared res_m disagree the moment the config moves
+    # off 10 km, and nothing raises: regrid._affine derives its transform from
+    # res_m while _block_mean_to_target derives spacing from the coord diff, so
+    # the two silently differ by the ratio.
+    res_m = float(cfg["grid"]["target_res_m"])
+    y = np.arange(ny, dtype="float64") * res_m
+    x = np.arange(nx, dtype="float64") * res_m
+    tgrid = TargetGrid(crs=cfg["grid"]["target_crs"], res_m=res_m, x=x, y=y)
     in_names = cfg["dataset"]["input_channels"]
     tg_names = cfg["dataset"]["target_channels"]
 

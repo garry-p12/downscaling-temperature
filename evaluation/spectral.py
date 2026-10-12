@@ -48,8 +48,15 @@ AMP_FLOOR = np.sqrt(0.75)     # the paper's effective-resolution threshold
 
 
 def radial_spectrum(pred: np.ndarray, truth: np.ndarray,
-                    dx_km: float = 10.0, window: bool = True) -> list[dict]:
-    """Per-wavenumber amplitude ratio and coherence for (T, H, W) stacks."""
+                    dx_km: float, window: bool = True) -> list[dict]:
+    """Per-wavenumber amplitude ratio and coherence for (T, H, W) stacks.
+
+    `dx_km` HAS NO DEFAULT ON PURPOSE. It used to default to 10.0 and no call
+    site ever overrode it, so the value was really "whatever grid the project
+    happened to be on". On a 5 km grid that default reports every wavelength
+    twice as coarse as it is, and because the curves keep their shape, nothing
+    about the output looks wrong. Pass `store.dx_km`.
+    """
     _, ny, nx = pred.shape
     w = np.outer(np.hanning(ny), np.hanning(nx)) if window else 1.0
     fp, ft = np.fft.rfft2(pred * w), np.fft.rfft2(truth * w)
@@ -139,6 +146,10 @@ def coherence_resolution(rows: list[dict], level: float = 0.5) -> float | None:
 
 def summarise_spectrum(rows: list[dict]) -> dict:
     """Both crossings plus band-mean skill, for reporting in place of one number."""
+    # 60 km is a physical threshold and stays put across resolutions, but the
+    # POPULATION inside it does not: a finer grid adds bands below the old
+    # Nyquist, so this mean is taken over more (and finer) bands. Comparable
+    # within a resolution, not across one.
     fine = [r for r in rows if r["wavelength_km"] <= 60]
     return {
         "eff_res_km": effective_resolution(rows),
@@ -184,6 +195,7 @@ def main(archs: list[str], zarr: str, out: str | None, device: str,
     ds = xr.open_zarr(zarr, consolidated=True)
     nz = Normalizer.load(str(Path(zarr).parent / "norm_stats.json"))
     cfg = load_config("configs/data_southcentral.yaml")
+    dx_km = float(cfg["grid"]["target_res_m"]) / 1000.0
     box = holdout_bounds(ds, cfg["holdout"])
     test = np.where(ds["split"].values == "test")[0]
     print(f"[spectral] {len(test)} test days, holdout crop "
@@ -205,7 +217,7 @@ def main(archs: list[str], zarr: str, out: str | None, device: str,
         except KeyError as e:
             print(f"[spectral] {arch}: {e}")
             continue
-        rows = radial_spectrum(P, T)
+        rows = radial_spectrum(P, T, dx_km=dx_km)
         eff = effective_resolution(rows)
         report[arch] = {"effective_resolution_km": eff, "spectrum": rows}
         print(f"=== {arch}")

@@ -98,14 +98,33 @@ REGIONS = {
 }
 
 
-def subregion_means(resid, mask, ny, nx, k=3):
+# A block is only used if it holds enough land to give a stable mean. "Enough"
+# is an AREA, not a cell count: the original literal of 20 cells was 2,000 km2
+# only because the grid was 10 km, and on a finer grid the same literal admits
+# blocks with a quarter of the land behind them, changing which columns of the
+# ridge design matrix are real and which are zeros — silently, and after the
+# fact, in every "% of oracle" number.
+MIN_BLOCK_KM2 = 2000.0
+
+
+def min_block_cells(dx_km: float) -> int:
+    """Cells a k x k block needs before its mean is trusted, at this cell size."""
+    return max(1, int(round(MIN_BLOCK_KM2 / (dx_km * dx_km))))
+
+
+def subregion_means(resid, mask, ny, nx, k=3, dx_km: float | None = None):
     """Mean residual in each of k x k blocks of the TRAINING region.
 
     One domain-wide mean throws away the fact that the bias is not perfectly
     uniform (measured train<->holdout offset correlation is only ~0.6). Letting
     a fit weight sub-regions separately lets it lean on whichever parts of the
     domain actually track the held-out one.
+
+    `dx_km` sets the minimum block occupancy via MIN_BLOCK_KM2. Leaving it None
+    keeps the historical 20-cell threshold, which is correct at 10 km and only
+    at 10 km — pass `store.dx_km` on any other grid.
     """
+    need = 20 if dx_km is None else min_block_cells(dx_km)
     out = []
     ys = np.linspace(0, ny, k + 1).astype(int)
     xs = np.linspace(0, nx, k + 1).astype(int)
@@ -114,7 +133,7 @@ def subregion_means(resid, mask, ny, nx, k=3):
             m = np.zeros_like(mask)
             m[ys[a]:ys[a + 1], xs[b]:xs[b + 1]] = True
             m &= mask
-            out.append(resid[:, m].mean(1) if m.sum() >= 20
+            out.append(resid[:, m].mean(1) if m.sum() >= need
                        else np.zeros(resid.shape[0]))
     return np.stack(out, 1)
 

@@ -83,10 +83,109 @@ def fetch(usaf: str, wban: str, year: int) -> pd.Series | None:
     return g.mean()[g.count() >= MIN_HOURS]
 
 
-def load_panel() -> list[dict]:
-    if not PANEL.exists():
-        raise SystemExit(f"{PANEL} is missing; regenerate it with --build-panel")
-    return json.loads(PANEL.read_text())
+ISD_HISTORY = ("https://www.ncei.noaa.gov/pub/data/noaa/isd-history.csv")
+
+
+def panel_path(store=None) -> Path:
+    """Where this grid's panel lives.
+
+    One file per resolution, never one file reused. `row`/`col` are grid
+    indices, so a 5 km panel and a 10 km panel are different objects that
+    happen to describe the same thermometers; sharing a filename would mean
+    one silently overwriting the other on whichever job ran last.
+    """
+    if store is None or abs(store.res_m - 10000.0) < 1.0:
+        return PANEL                       # the original 10 km panel, unmoved
+    return PANEL.with_name(f"station_panel_{store.dx_km:g}km.json")
+
+
+def load_panel(store=None) -> list[dict]:
+    """The station panel, refusing to hand back one built for another grid.
+
+    `row`/`col` are grid indices, so a panel is only meaningful on the grid it
+    was built for. Pass the store and a mismatch is an error rather than 44
+    silently misplaced thermometers.
+    """
+    path = panel_path(store)
+    if not path.exists():
+        raise SystemExit(
+            f"{path} is missing; regenerate it with:\n"
+            f"  python -m evaluation.station_panel --build-panel --store <zarr>")
+    doc = json.loads(path.read_text())
+    # Older panels are a bare list with no provenance. Those predate the 5 km
+    # work and are 10 km by construction.
+    if isinstance(doc, dict):
+        meta, rows = doc["grid"], doc["stations"]
+    else:
+        meta, rows = {"res_m": 10000, "shape": [93, 100]}, doc
+    if store is not None:
+        want = {"res_m": store.res_m, "shape": list(store.shape)}
+        got = {"res_m": float(meta["res_m"]), "shape": list(meta["shape"])}
+        if want != got:
+            raise SystemExit(
+                f"{path} was built for {got} but the store is {want}. "
+                f"Rebuild it: python -m evaluation.station_panel --build-panel "
+                f"--store <zarr>")
+    return rows
+
+
+def build_panel(store, out: Path | None = None) -> list[dict]:
+    """Regenerate the panel for whatever grid `store` is on.
+
+    Selection, in order: every ISD station reporting across the whole window,
+    whose nearest target cell lies inside the holdout box AND on land. Nearest
+    is computed in the PROJECTED CRS, not in lat/lon — Albers rotates against
+    lat/lon, so a nearest-neighbour search in degrees picks a different cell
+    near the domain edges.
+    """
+    import pandas as pd
+    from pyproj import Transformer
+
+    out = Path(out) if out is not None else panel_path(store)
+    CACHE.mkdir(parents=True, exist_ok=True)
+    hist = CACHE / "isd-history.csv"
+    if not hist.exists():
+        print(f"[panel] fetching {ISD_HISTORY}")
+        urllib.request.urlretrieve(ISD_HISTORY, hist)
+    df = pd.read_csv(hist, dtype={"USAF": str, "WBAN": str})
+    df = df.dropna(subset=["LAT", "LON"])
+    df = df[(df.LAT != 0) | (df.LON != 0)]
+    df["BEGIN"] = pd.to_datetime(df.BEGIN, format="%Y%m%d", errors="coerce")
+    df["END"] = pd.to_datetime(df.END, format="%Y%m%d", errors="coerce")
+    df = df[(df.BEGIN <= "2019-01-01") & (df.END >= "2023-12-31")]
+
+    i0, i1, j0, j1 = store.box
+    tf = Transformer.from_crs("EPSG:4326", store.cfg["grid"]["target_crs"],
+                              always_xy=True)
+    sx, sy = tf.transform(df.LON.values, df.LAT.values)
+    gx = store.ds["x"].values
+    gy = store.ds["y"].values
+
+    rows = []
+    for (_, r), x, y in zip(df.iterrows(), sx, sy):
+        if not (gx.min() <= x <= gx.max() and gy.min() <= y <= gy.max()):
+            continue
+        j = int(np.abs(gx - x).argmin())
+        i = int(np.abs(gy - y).argmin())
+        if not (i0 <= i < i1 and j0 <= j < j1):
+            continue
+        if not store.land[i, j]:
+            continue
+        name = "_".join(str(r["STATION NAME"]).split())
+        rows.append({"key": f"{r.USAF}_{name}", "usaf": str(r.USAF),
+                     "wban": str(r.WBAN), "lat": float(r.LAT),
+                     "lon": float(r.LON), "row": i, "col": j,
+                     "elev_m": float(r["ELEV(M)"]) if pd.notna(r["ELEV(M)"]) else None})
+    rows.sort(key=lambda d: d["key"])
+    out.write_text(json.dumps(
+        {"grid": {"res_m": store.res_m, "shape": list(store.shape),
+                  "crs": store.cfg["grid"]["target_crs"],
+                  "box": list(store.box)},
+         "stations": rows}, indent=1))
+    print(f"[panel] {len(rows)} stations inside the holdout box on a "
+          f"{store.shape[0]}x{store.shape[1]} / {store.dx_km:.0f} km grid "
+          f"-> {out}")
+    return rows
 
 
 def score(pred: np.ndarray, obs: np.ndarray) -> dict:
@@ -97,14 +196,15 @@ def score(pred: np.ndarray, obs: np.ndarray) -> dict:
             "bias": float(np.nanmean(d))}
 
 
-def main(years, models, do_fetch, out_dir, device):
+def main(years, models, do_fetch, out_dir, device, store_zarr=None):
     from evaluation.fields import Store, predict_all
 
-    panel = load_panel()
     st_e = Store("data_store_sc/ix_era/dataset.zarr") if \
         (REPO / "data_store_sc/ix_era/dataset.zarr").exists() else \
         Store("data_store_sc/super/dataset.zarr")
-    st_a = Store("data_store_sc/aorc/dataset.zarr")
+    st_a = Store(store_zarr or "data_store_sc/aorc/dataset.zarr")
+    # Checked against the store the row/col will actually index into.
+    panel = load_panel(st_a)
     times = pd.DatetimeIndex(st_a.ds["time"].values)
     era = st_e.to_absolute(st_e.truth())
     aorc = st_a.to_absolute(st_a.truth())
@@ -203,5 +303,16 @@ if __name__ == "__main__":
     # is 33k forward passes and does not fit a 90-minute allocation on CPU; on
     # the GPU the job already holds it is minutes.
     ap.add_argument("--device", default="cuda")
+    ap.add_argument("--build-panel", action="store_true",
+                    help="regenerate station_panel.json for --store's grid")
+    ap.add_argument("--store", default=None,
+                    help="zarr whose grid the panel is built for / scored on")
+    ap.add_argument("--panel-out", default=None,
+                    help="override the per-resolution panel filename")
     a = ap.parse_args()
-    main(a.years, a.models, a.fetch, a.out, a.device)
+    if a.build_panel:
+        from evaluation.fields import Store
+        build_panel(Store(a.store or "data_store_sc/aorc/dataset.zarr"),
+                    a.panel_out)
+    else:
+        main(a.years, a.models, a.fetch, a.out, a.device, a.store)

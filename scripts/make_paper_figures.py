@@ -47,11 +47,25 @@ from evaluation import paperstyle as ps                       # noqa: E402
 OUT = REPO / "image_outputs" / "paper"
 SUPER = "data_store_sc/super/dataset.zarr"
 NOISE = 0.0097          # measured between-seed RMSE floor
+CUT_KM = 60.0           # the high-pass cut-off every "fine scale" number uses
 KBEST = 6               # the block grid the paper reports
 
 
 def rmse(x) -> float:
     return float(np.sqrt(np.nanmean(np.asarray(x) ** 2)))
+
+
+def rim_cells(sigma: float) -> int:
+    """Cells to drop at the domain edge before quoting a high-pass statistic.
+
+    `highpass` uses mode="nearest", which leaves a contaminated band a few
+    sigma wide. That band is a number of CELLS proportional to sigma, so the
+    literal 4 this used to be — right at 10 km, where sigma is 1.12 cells —
+    would stop covering it on a finer grid and let a frame of fake fine-scale
+    amplitude into every quoted mean.
+    """
+    import math
+    return max(2, int(math.ceil(3.0 * sigma)))
 
 
 def offset(st, model: str, k: int = KBEST):
@@ -67,7 +81,8 @@ def offset(st, model: str, k: int = KBEST):
 
     resid = st.truth() - predict_all(st, model, "last")
     true_off = resid[:, st.m_hold].mean(1)
-    X = subregion_means(resid, st.m_train, *st.shape, k=k)
+    X = subregion_means(resid, st.m_train, *st.shape, k=k,
+                        dx_km=st.dx_km)
     return resid, ridge_fit_predict(X, true_off, st.i_train), true_off
 
 
@@ -169,7 +184,8 @@ def f2_estimator(plt):
 
     ks, rs = [], []
     for k in (2, 3, 4, 5, 6, 8, 10, 12):
-        X = subregion_means(resid, st.m_train, *st.shape, k=k)
+        X = subregion_means(resid, st.m_train, *st.shape, k=k,
+                            dx_km=st.dx_km)
         e = ridge_fit_predict(X, true_off, st.i_train)
         ks.append(k)
         rs.append(rmse((resid[te] - e[te, None, None])[:, hold]))
@@ -384,7 +400,7 @@ def f4_resolution(plt):
                 if not (REPO / "checkpoints" / f"{pref}_s{sd}" / "last.pt").exists():
                     continue
                 F = st.to_absolute(predict_all(st, f"{pref}_s{sd}", "last"))
-            curves.append(radial_spectrum(crop(F), A))
+            curves.append(radial_spectrum(crop(F), A, dx_km=sa.dx_km))
         if not curves:
             continue
         w = [r["wavelength_km"] for r in curves[0]]
@@ -431,9 +447,10 @@ def f5_target(plt):
     sd_ = Store("data_store_sc/dyn/dataset.zarr")
     te, land, hold = sa.i_test, sa.land, sa.m_hold
     # 60 km half-amplitude cut-off, expressed as a Gaussian sigma in cells.
-    sigma = float(np.sqrt(np.log(2)) / (np.pi * np.sqrt(2)) * 60.0 / 10.0)
+    sigma = sa.sigma_cells(CUT_KM)
     rim = np.zeros_like(land)
-    rim[4:-4, 4:-4] = True
+    r = rim_cells(sigma)
+    rim[r:-r, r:-r] = True
     fine = land & rim
 
     def filled(F):
@@ -688,9 +705,10 @@ def f9_target_maps(plt):
 
     pc = {k: np.sqrt(((v[te] - A[te]) ** 2).mean(0)) for k, v in
           (("era", p_e), ("aorc", p_a))}
-    sigma = float(np.sqrt(np.log(2)) / (np.pi * np.sqrt(2)) * 60.0 / 10.0)
+    sigma = sa.sigma_cells(CUT_KM)
     rim = np.zeros_like(land)
-    rim[4:-4, 4:-4] = True
+    r = rim_cells(sigma)
+    rim[r:-r, r:-r] = True
     fine = land & rim
 
     def filled(F):

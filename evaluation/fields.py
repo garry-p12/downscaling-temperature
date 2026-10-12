@@ -94,6 +94,33 @@ class Store:
     def shape(self):
         return self.land.shape
 
+    @property
+    def res_m(self) -> float:
+        """Target cell size in metres, from the config this store was built with."""
+        return float(self.cfg["grid"]["target_res_m"])
+
+    @property
+    def dx_km(self) -> float:
+        """Target cell size in km.
+
+        Every spectral and high-pass quantity in this repo is a distance, and
+        a distance only becomes a number of cells once you know this. Pass it
+        explicitly rather than letting a 10.0 default stand in: at 5 km the
+        default silently reports every wavelength 2x too coarse, and the curve
+        keeps its shape, so nothing looks wrong.
+        """
+        return self.res_m / 1000.0
+
+    def sigma_cells(self, cutoff_km: float) -> float:
+        """Gaussian sigma, in CELLS, whose high-pass half-amplitude is cutoff_km.
+
+        Half-AMPLITUDE, not half-power: the filter is applied to the field, and
+        the figures quote the sd of what it leaves behind.
+        """
+        import math
+        return (math.sqrt(math.log(2)) / (math.pi * math.sqrt(2))
+                * cutoff_km / self.dx_km)
+
     def truth(self, absolute: bool = False) -> np.ndarray:
         """(T, H, W) target field. Anomaly unless absolute=True."""
         t = np.nan_to_num(self.ds["target"].values[:, 0]).astype("float32")
@@ -123,8 +150,13 @@ def predict_all(store: Store, arch: str, ckpt: str = "last",
     if not path.exists():
         raise FileNotFoundError(path)
 
+    # Grid shape is part of the key. Without it, rebuilding a store at a
+    # different resolution under the same path with the same day count returns
+    # the previous resolution's cached array — the right dtype, the right
+    # length, and entirely the wrong field.
     key = hashlib.sha1(
-        f"{path}:{path.stat().st_mtime_ns}:{store.path}:{store.ds.sizes['time']}"
+        f"{path}:{path.stat().st_mtime_ns}:{store.path}:"
+        f"{store.ds.sizes['time']}:{store.shape[0]}x{store.shape[1]}"
         .encode()).hexdigest()[:16]
     cached = CACHE / f"{arch}_{ckpt}_{key}.npy"
     if use_cache and cached.exists():
